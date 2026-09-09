@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { TabType } from '../types';
 import { ASSETS } from '../data/initialData';
+import { useAuth } from '../auth/AuthProvider';
 
 interface HeaderProps {
   currentTab: TabType;
@@ -14,6 +15,7 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectTab,
   streakCount,
 }) => {
+  const { user, signOut } = useAuth();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
@@ -183,9 +185,13 @@ export const Header: React.FC<HeaderProps> = ({
                     className="w-9 h-9 rounded-full object-cover"
                     src={ASSETS.thanhAvatar}
                   />
-                  <div>
-                    <p className="text-sm font-bold text-[#1e1b17]">Thanh</p>
-                    <p className="text-[11px] text-[#8a726a]">Gentle Flow Plan</p>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-[#1e1b17] truncate">
+                      {user?.displayName ?? 'Friend'}
+                    </p>
+                    <p className="text-[11px] text-[#8a726a] truncate" title={user?.email}>
+                      {user?.email ?? 'Gentle Flow Plan'}
+                    </p>
                   </div>
                 </div>
                 <div className="pt-2 text-xs space-y-1">
@@ -215,6 +221,19 @@ export const Header: React.FC<HeaderProps> = ({
                     className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-[#faf2ec] text-[#56423b] font-medium"
                   >
                     Crew Sanctuary
+                  </button>
+                </div>
+                {/* Ends the Supabase session; the app returns to the sign-in screen. */}
+                <div className="pt-2 mt-2 border-t border-[#eee7e1]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowProfileMenu(false);
+                      void signOut();
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-[#ffdbce]/40 text-[#9f4118] font-semibold text-xs"
+                  >
+                    Sign out
                   </button>
                 </div>
               </div>

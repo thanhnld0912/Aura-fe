@@ -9,8 +9,10 @@ import { InsightsView } from './components/InsightsView';
 import { CrewView } from './components/CrewView';
 import { HistoryView } from './components/HistoryView';
 import { AICoachView } from './components/AICoachView';
+import { LoginView } from './components/LoginView';
+import { useAuth } from './auth/AuthProvider';
 
-export function App() {
+function SignedInApp() {
   const [currentTab, setCurrentTab] = useState<TabType>('today');
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [logModalInitialPrompt, setLogModalInitialPrompt] = useState<string | undefined>(undefined);
@@ -184,6 +186,34 @@ export function App() {
       />
     </div>
   );
+}
+
+
+/**
+ * The gate.
+ *
+ * AURA holds one person's health record, so there is no useful unauthenticated
+ * view of it — every screen below needs a user id, and that id comes only from a
+ * verified token. Rather than a router with guarded paths, the whole application is
+ * behind this one branch, which is the same protection with nothing to forget.
+ */
+export function App() {
+  const { status } = useAuth();
+
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen bg-[#fff8f3] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 rounded-full border-2 border-[#ffdbce] border-t-[#ff8a5b] animate-spin" />
+          <p className="text-xs text-[#bda99f] font-medium">Finding your rhythm…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (status !== 'signed-in') return <LoginView />;
+
+  return <SignedInApp />;
 }
 
 export default App;
