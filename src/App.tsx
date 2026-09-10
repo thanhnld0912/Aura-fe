@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { TabType, MealLogDraft, TimelineSection, CrewMember, HighFiveFeedItem } from './types';
-import { INITIAL_TIMELINE, INITIAL_CREW, INITIAL_FEED } from './data/initialData';
+import { TabType, CrewMember, HighFiveFeedItem } from './types';
+import { INITIAL_CREW, INITIAL_FEED } from './data/initialData';
 import { Header } from './components/Header';
 import { BottomBar } from './components/BottomBar';
 import { LogModal } from './components/LogModal';
@@ -11,6 +11,7 @@ import { HistoryView } from './components/HistoryView';
 import { AICoachView } from './components/AICoachView';
 import { LoginView } from './components/LoginView';
 import { useAuth } from './auth/AuthProvider';
+import { useTodayMeals } from './hooks/useTodayMeals';
 
 function SignedInApp() {
   const [currentTab, setCurrentTab] = useState<TabType>('today');
@@ -18,7 +19,9 @@ function SignedInApp() {
   const [logModalInitialPrompt, setLogModalInitialPrompt] = useState<string | undefined>(undefined);
   const [selectedMood, setSelectedMood] = useState<string>('good');
   const [streakCount, setStreakCount] = useState<number>(5);
-  const [timeline, setTimeline] = useState<TimelineSection[]>(INITIAL_TIMELINE);
+  // Today's Story is served by GET /api/meals/today. The other views below are still
+  // prototype fixtures; replacing them is a later task.
+  const today = useTodayMeals();
   const [crew, setCrew] = useState<CrewMember[]>(INITIAL_CREW);
   const [feed, setFeed] = useState<HighFiveFeedItem[]>(INITIAL_FEED);
 
@@ -27,48 +30,21 @@ function SignedInApp() {
     setIsLogModalOpen(true);
   };
 
-  const handleAddLogSuccess = (mealDraft: MealLogDraft) => {
-    // Generate new event from draft
-    const newEvent = {
-      id: 'log-' + Date.now(),
-      time: mealDraft.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      title: mealDraft.mealType + ' Nourishment',
-      statusBadge: 'Logged',
-      statusType: 'success' as const,
-      description: mealDraft.rawInput.replace(/^[“"]|[”"]$/g, ''),
-      tags: mealDraft.foods.map((f) => `${f.icon} ${f.vietnameseName} (${f.selectedPortion})`),
-      note: {
-        title: 'AURA Note',
-        content: mealDraft.mindfulNote,
-      },
-    };
-
-    // Add to afternoon or create entry
-    setTimeline((prev) => {
-      return prev.map((section) => {
-        if (section.id === 'afternoon') {
-          return {
-            ...section,
-            events: [newEvent, ...section.events],
-          };
-        }
-        return section;
-      });
-    });
-
-    // Also add to feed
-    const newFeedItem: HighFiveFeedItem = {
-      id: 'f-' + Date.now(),
-      author: 'Thanh (You)',
-      action: `logged ${mealDraft.mealType}`,
-      timeAgo: 'Just now',
-      quote: `“${mealDraft.foods.map((f) => f.vietnameseName).join(', ')}”`,
-      reactions: [
-        { emoji: '🍵', count: 1, userReacted: true },
-        { emoji: '👏', count: 1 },
-      ],
-    };
-    setFeed((prev) => [newFeedItem, ...prev]);
+  /**
+   * A meal was logged. Ask the server what today looks like now.
+   *
+   * One reload per save, and no optimistic insert: the server assigned the id, the
+   * event, the resolved grams and every nutrition figure, so a row invented here
+   * would have to make all of them up and would sit next to real meals looking
+   * identical.
+   *
+   * The crew feed deliberately gets nothing. It used to gain a post announcing the
+   * meal, built from the local draft — but the crew feed is still a fixture with no
+   * backend behind it, so that post claimed something had been shared that had not.
+   * Wiring the feed for real is a later task (`FOLLOW-UP`).
+   */
+  const handleMealSaved = () => {
+    today.reload();
   };
 
   // Crew reactions
@@ -139,7 +115,7 @@ function SignedInApp() {
       <main className="flex-1 pt-24">
         {currentTab === 'today' && (
           <TodayView
-            timeline={timeline}
+            today={today}
             onOpenLogModal={handleOpenLogModal}
             onSelectMood={setSelectedMood}
             selectedMood={selectedMood}
@@ -181,7 +157,7 @@ function SignedInApp() {
       <LogModal
         isOpen={isLogModalOpen}
         onClose={() => setIsLogModalOpen(false)}
-        onAddLogSuccess={handleAddLogSuccess}
+        onSaved={handleMealSaved}
         initialPrompt={logModalInitialPrompt}
       />
     </div>

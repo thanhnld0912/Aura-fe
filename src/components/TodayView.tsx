@@ -1,15 +1,28 @@
 import React, { useState } from 'react';
-import { TimelineSection, MealLogDraft } from '../types';
+import { ApiError } from '../lib/api';
+import type { TodayMealsState } from '../hooks/useTodayMeals';
+
+/**
+ * The request id, when the failure came back from the server rather than from a dead
+ * socket. Quoting it lets a support conversation find the exact request in the log.
+ */
+function requestIdOf(error: TodayMealsState['error']): string | undefined {
+  return error instanceof ApiError ? error.requestId : undefined;
+}
 
 interface TodayViewProps {
-  timeline: TimelineSection[];
+  /**
+   * Today's Story, from the API. The rest of this view is still prototype content;
+   * this one card is the first that shows the user their own data.
+   */
+  today: TodayMealsState;
   onOpenLogModal: (initialPrompt?: string) => void;
   onSelectMood: (mood: string) => void;
   selectedMood: string;
 }
 
 export const TodayView: React.FC<TodayViewProps> = ({
-  timeline,
+  today,
   onOpenLogModal,
   onSelectMood,
   selectedMood,
@@ -258,10 +271,15 @@ export const TodayView: React.FC<TodayViewProps> = ({
         </div>
       </div>
 
-      {/* Today's Story (Timeline) */}
+      {/* Today's Story — the first card served by the API rather than by fixtures. */}
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-extrabold text-[#1e1b17]">Today's Story</h2>
+          <div>
+            <h2 className="text-xl font-extrabold text-[#1e1b17]">Today's Story</h2>
+            {/* Said plainly: sleep, workouts and check-ins are not wired up yet, so an
+                absence here is not evidence that nothing else happened. */}
+            <p className="text-[11px] text-[#8a726a] mt-0.5">Meals so far today</p>
+          </div>
           <button
             onClick={() => onOpenLogModal()}
             className="text-xs font-bold text-[#9f4118] hover:underline flex items-center gap-1"
@@ -270,22 +288,76 @@ export const TodayView: React.FC<TodayViewProps> = ({
           </button>
         </div>
 
-        {timeline.map((section) => (
+        {today.status === 'loading' && (
+          <div className="bg-white rounded-3xl p-10 border border-[#eee7e1] shadow-xs flex flex-col items-center gap-3">
+            <div className="h-7 w-7 rounded-full border-2 border-[#ffdbce] border-t-[#ff8a5b] animate-spin" />
+            <p className="text-xs text-[#bda99f] font-medium">Gathering today…</p>
+          </div>
+        )}
+
+        {today.status === 'error' && (
+          <div className="bg-white rounded-3xl p-6 border border-[#ffdbce] shadow-xs space-y-3">
+            <div className="flex items-start gap-2.5">
+              <span className="material-symbols-outlined text-[#9f4118] text-[20px]">
+                cloud_off
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-[#1e1b17]">Could not load today's meals</p>
+                <p className="text-xs text-[#56423b] leading-relaxed mt-0.5">
+                  {today.error?.message}
+                </p>
+                {requestIdOf(today.error) && (
+                  <p className="text-[10px] text-[#bda99f] mt-1 font-mono break-all">
+                    Request {requestIdOf(today.error)}
+                  </p>
+                )}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={today.reload}
+              className="px-4 py-1.5 rounded-full bg-[#ff8a5b] text-white text-xs font-bold hover:bg-[#f5763f] transition-colors"
+            >
+              Try again
+            </button>
+          </div>
+        )}
+
+        {today.status === 'success' && today.sections.length === 0 && (
+          <div className="bg-white rounded-3xl p-10 border border-[#eee7e1] shadow-xs text-center space-y-1">
+            <p className="text-sm font-bold text-[#1e1b17]">Nothing logged yet today.</p>
+            <p className="text-xs text-[#8a726a]">
+              Use <span className="font-semibold text-[#9f4118]">+ Log moment</span> when you
+              are ready.
+            </p>
+          </div>
+        )}
+
+        {today.status === 'success' &&
+          today.sections.map((section) => (
           <div key={section.id} className="bg-white rounded-3xl p-6 border border-[#eee7e1] shadow-xs space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-[#eee7e1]/80">
               <div className="flex items-center gap-2">
                 <span className="text-xl">{section.icon}</span>
                 <h3 className="text-base font-bold text-[#1e1b17]">{section.period}</h3>
               </div>
-              <span className="text-xs font-semibold text-[#8a726a]">{section.timeRange}</span>
+              {/* Empty for meals: the API sends no time range, and one will not be
+                  guessed here. */}
+              {section.timeRange && (
+                <span className="text-xs font-semibold text-[#8a726a]">{section.timeRange}</span>
+              )}
             </div>
 
             <div className="space-y-4">
               {section.events.map((event) => (
                 <div key={event.id} className="flex items-start gap-4 p-3 rounded-2xl hover:bg-[#faf2ec]/50 transition-colors">
-                  <div className="text-xs font-bold text-[#8a726a] w-12 pt-0.5 flex-shrink-0">
-                    {event.time}
-                  </div>
+                  {/* The column disappears rather than showing a made-up clock time:
+                      `GET /api/meals/today` returns no occurrence time at all. */}
+                  {event.time && (
+                    <div className="text-xs font-bold text-[#8a726a] w-12 pt-0.5 flex-shrink-0">
+                      {event.time}
+                    </div>
+                  )}
                   <div className="flex-1 space-y-1.5">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h4 className="text-sm font-bold text-[#1e1b17]">{event.title}</h4>
