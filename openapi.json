@@ -4319,6 +4319,370 @@
         }
       }
     },
+    "/api/meals/analyze-image": {
+      "post": {
+        "tags": [
+          "Meals"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "image"
+                ],
+                "properties": {
+                  "image": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "JPEG, PNG or WebP, up to the upload limit (8 MB by default). Checked by content rather than by header, re-encoded, and stripped of all metadata including GPS before analysis. Never stored."
+                  },
+                  "mealType": {
+                    "type": "string",
+                    "enum": [
+                      "breakfast",
+                      "lunch",
+                      "dinner",
+                      "snack",
+                      "drink"
+                    ],
+                    "default": "lunch"
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "description": "Optional hint about what the food is. Treated as untrusted text."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "meal": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "eventId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "nullable": true
+                        },
+                        "mealType": {
+                          "type": "string",
+                          "enum": [
+                            "breakfast",
+                            "lunch",
+                            "dinner",
+                            "snack",
+                            "drink"
+                          ]
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "draft",
+                            "confirmed",
+                            "discarded"
+                          ]
+                        },
+                        "rawInput": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid"
+                              },
+                              "foodId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "nullable": true
+                              },
+                              "detectedName": {
+                                "type": "string"
+                              },
+                              "displayNameVi": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "displayNameEn": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "quantity": {
+                                "type": "number"
+                              },
+                              "unit": {
+                                "type": "string"
+                              },
+                              "gramsResolved": {
+                                "type": "number",
+                                "nullable": true
+                              },
+                              "portionLabel": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "nutrition": {
+                                "type": "object",
+                                "properties": {
+                                  "kcal": {
+                                    "type": "number",
+                                    "nullable": true
+                                  },
+                                  "proteinG": {
+                                    "type": "number",
+                                    "nullable": true
+                                  },
+                                  "carbsG": {
+                                    "type": "number",
+                                    "nullable": true
+                                  },
+                                  "fatG": {
+                                    "type": "number",
+                                    "nullable": true
+                                  },
+                                  "fiberG": {
+                                    "type": "number",
+                                    "nullable": true
+                                  }
+                                },
+                                "required": [
+                                  "proteinG",
+                                  "carbsG",
+                                  "fatG",
+                                  "fiberG"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "source": {
+                                "type": "string"
+                              },
+                              "confidence": {
+                                "type": "number"
+                              },
+                              "confidenceBand": {
+                                "type": "string",
+                                "enum": [
+                                  "confident",
+                                  "estimate",
+                                  "uncertain",
+                                  "unresolved"
+                                ]
+                              },
+                              "userConfirmed": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "foodId",
+                              "detectedName",
+                              "displayNameVi",
+                              "displayNameEn",
+                              "quantity",
+                              "unit",
+                              "gramsResolved",
+                              "portionLabel",
+                              "nutrition",
+                              "source",
+                              "confidence",
+                              "confidenceBand",
+                              "userConfirmed"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "totals": {
+                          "type": "object",
+                          "properties": {
+                            "kcal": {
+                              "type": "number",
+                              "nullable": true
+                            },
+                            "proteinG": {
+                              "type": "number",
+                              "nullable": true
+                            },
+                            "carbsG": {
+                              "type": "number",
+                              "nullable": true
+                            },
+                            "fatG": {
+                              "type": "number",
+                              "nullable": true
+                            },
+                            "fiberG": {
+                              "type": "number",
+                              "nullable": true
+                            }
+                          },
+                          "required": [
+                            "proteinG",
+                            "carbsG",
+                            "fatG",
+                            "fiberG"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "confidence": {
+                          "type": "number",
+                          "nullable": true
+                        },
+                        "confidenceBand": {
+                          "type": "string",
+                          "enum": [
+                            "confident",
+                            "estimate",
+                            "uncertain",
+                            "unresolved"
+                          ]
+                        },
+                        "userConfirmed": {
+                          "type": "boolean"
+                        },
+                        "userEdited": {
+                          "type": "boolean"
+                        },
+                        "isEstimate": {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "unresolved": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "notice": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "eventId",
+                        "mealType",
+                        "status",
+                        "rawInput",
+                        "items",
+                        "totals",
+                        "confidence",
+                        "confidenceBand",
+                        "userConfirmed",
+                        "userEdited",
+                        "isEstimate",
+                        "createdAt",
+                        "unresolved",
+                        "notice"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "ambiguous": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "parser": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "meal",
+                    "ambiguous",
+                    "parser"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed. `details` names the offending fields.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or invalid token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Upload over the size limit, image dimensions over the supported maximum, or more form parts than the endpoint accepts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Not multipart/form-data, or the file is not a readable JPEG, PNG or WebP image.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded. Carries a `Retry-After` header.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected failure. The cause is logged; quote `requestId` to find it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/meals/today": {
       "get": {
         "tags": [

@@ -2179,6 +2179,168 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/meals/analyze-image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "multipart/form-data": {
+                        /**
+                         * Format: binary
+                         * @description JPEG, PNG or WebP, up to the upload limit (8 MB by default). Checked by content rather than by header, re-encoded, and stripped of all metadata including GPS before analysis. Never stored.
+                         */
+                        image: string;
+                        /**
+                         * @default lunch
+                         * @enum {string}
+                         */
+                        mealType?: "breakfast" | "lunch" | "dinner" | "snack" | "drink";
+                        /** @description Optional hint about what the food is. Treated as untrusted text. */
+                        description?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            meal: {
+                                /** Format: uuid */
+                                id: string;
+                                /** Format: uuid */
+                                eventId: string | null;
+                                /** @enum {string} */
+                                mealType: "breakfast" | "lunch" | "dinner" | "snack" | "drink";
+                                /** @enum {string} */
+                                status: "draft" | "confirmed" | "discarded";
+                                rawInput: string | null;
+                                items: {
+                                    /** Format: uuid */
+                                    id: string;
+                                    /** Format: uuid */
+                                    foodId: string | null;
+                                    detectedName: string;
+                                    displayNameVi: string | null;
+                                    displayNameEn: string | null;
+                                    quantity: number;
+                                    unit: string;
+                                    gramsResolved: number | null;
+                                    portionLabel: string | null;
+                                    nutrition: {
+                                        kcal?: number | null;
+                                        proteinG: number | null;
+                                        carbsG: number | null;
+                                        fatG: number | null;
+                                        fiberG: number | null;
+                                    };
+                                    source: string;
+                                    confidence: number;
+                                    /** @enum {string} */
+                                    confidenceBand: "confident" | "estimate" | "uncertain" | "unresolved";
+                                    userConfirmed: boolean;
+                                }[];
+                                totals: {
+                                    kcal?: number | null;
+                                    proteinG: number | null;
+                                    carbsG: number | null;
+                                    fatG: number | null;
+                                    fiberG: number | null;
+                                };
+                                confidence: number | null;
+                                /** @enum {string} */
+                                confidenceBand: "confident" | "estimate" | "uncertain" | "unresolved";
+                                userConfirmed: boolean;
+                                userEdited: boolean;
+                                /** @enum {boolean} */
+                                isEstimate: true;
+                                createdAt: string;
+                                unresolved: string[];
+                                notice: string;
+                            };
+                            ambiguous: string[];
+                            parser: string;
+                        };
+                    };
+                };
+                /** @description Validation failed. `details` names the offending fields. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorEnvelope"];
+                    };
+                };
+                /** @description Missing, expired or invalid token. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorEnvelope"];
+                    };
+                };
+                /** @description Upload over the size limit, image dimensions over the supported maximum, or more form parts than the endpoint accepts. */
+                413: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorEnvelope"];
+                    };
+                };
+                /** @description Not multipart/form-data, or the file is not a readable JPEG, PNG or WebP image. */
+                415: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorEnvelope"];
+                    };
+                };
+                /** @description Rate limit exceeded. Carries a `Retry-After` header. */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorEnvelope"];
+                    };
+                };
+                /** @description Unexpected failure. The cause is logged; quote `requestId` to find it. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorEnvelope"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/meals/today": {
         parameters: {
             query?: never;
