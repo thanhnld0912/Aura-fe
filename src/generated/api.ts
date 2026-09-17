@@ -3348,6 +3348,484 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/insights/weekly": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    weekStart?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            period: {
+                                weekStart: string;
+                                weekEnd: string;
+                                timezone: string;
+                                daysInPeriod: number;
+                                daysElapsed: number;
+                                isComplete: boolean;
+                            };
+                            coverage: {
+                                daysTracked: number;
+                                daysElapsed: number;
+                                rate: number | null;
+                                /** @enum {string} */
+                                status: "sufficient" | "insufficient_data";
+                            };
+                            days: {
+                                localDate: string;
+                                elapsed: boolean;
+                                tracked: boolean | null;
+                                eventsLogged: number | null;
+                                mealsLogged: number | null;
+                                /** @enum {string|null} */
+                                mood: "low" | "okay" | "good" | "great" | null;
+                            }[];
+                            nutrition: {
+                                /** @enum {string} */
+                                status: "ok" | "no_data";
+                                daysWithConfirmedMeals: number;
+                                coverage: number | null;
+                                confirmedMeals: number | null;
+                                averageMealsPerLoggedDay: number | null;
+                                distinctFoods: number | null;
+                                itemsNeedingReview: number | null;
+                            };
+                            activity: {
+                                /** @enum {string} */
+                                status: "ok" | "no_data";
+                                activeDays: number;
+                                walks: number | null;
+                                workoutSessions: {
+                                    completed: number;
+                                    partial: number;
+                                    skipped: number;
+                                } | null;
+                            };
+                            plan: {
+                                /** @enum {string} */
+                                status: "ok" | "no_data";
+                                daysWithPlan: number;
+                                plannedItems: number | null;
+                                resolvedItems: number | null;
+                                happenedItems: number | null;
+                                pendingItems: number | null;
+                                adherenceRate: number | null;
+                                byAdherence: {
+                                    pending: number;
+                                    on_time: number;
+                                    shifted: number;
+                                    substituted: number;
+                                    not_logged: number;
+                                } | null;
+                                activity: {
+                                    planned: number;
+                                    resolved: number;
+                                    happened: number;
+                                    rate: number | null;
+                                } | null;
+                            };
+                            habits: {
+                                /** @enum {string} */
+                                status: "ok" | "no_data";
+                                daysWithLogs: number;
+                                trackedHabits: number | null;
+                                logs: {
+                                    done: number;
+                                    partial: number;
+                                    skipped: number;
+                                } | null;
+                                completionRate: number | null;
+                            };
+                            checkins: {
+                                /** @enum {string} */
+                                status: "ok" | "no_data";
+                                daysWithCheckin: number;
+                                moodCounts: {
+                                    low: number;
+                                    okay: number;
+                                    good: number;
+                                    great: number;
+                                } | null;
+                                dayTagCounts: {
+                                    normal: number;
+                                    busy: number;
+                                    better_than_expected: number;
+                                    not_as_planned: number;
+                                } | null;
+                                averageEnergy: number | null;
+                                energySamples: number | null;
+                            };
+                            sleep: {
+                                /** @enum {string} */
+                                status: "ok" | "no_data";
+                                daysWithSleep: number;
+                                averageSleepMinutes: number | null;
+                            };
+                            comparison: {
+                                previousWeekStart: string;
+                                /** @enum {string} */
+                                status: "available" | "insufficient_data" | "unavailable";
+                                metrics: {
+                                    /** @enum {string} */
+                                    metric: "logging_coverage" | "meal_logging_coverage" | "plan_adherence" | "habit_completion";
+                                    /** @enum {string} */
+                                    status: "available" | "insufficient_data" | "unavailable";
+                                    current: number | null;
+                                    previous: number | null;
+                                    delta: number | null;
+                                    /** @enum {string|null} */
+                                    direction: "up" | "down" | "flat" | null;
+                                }[];
+                            };
+                            patterns: {
+                                /** @enum {string} */
+                                status: "unavailable" | "none" | "available";
+                                items: {
+                                    id: string;
+                                    /** @enum {string} */
+                                    kind: "correlation" | "trend" | "timing" | "frequency" | "streak";
+                                    subjectMetric: string;
+                                    subjectLabel: string;
+                                    objectMetric: string | null;
+                                    objectLabel: string | null;
+                                    /** @enum {string} */
+                                    direction: "positive" | "negative" | "none";
+                                    strength: number;
+                                    pValue: number | null;
+                                    sampleSize: number;
+                                    windowDays: number;
+                                    coverage: number;
+                                    caveat: string;
+                                }[];
+                            };
+                            dataQuality: {
+                                limitations: ("week_in_progress" | "insufficient_logging_coverage" | "no_meal_logs" | "meal_items_unresolved" | "no_activity_logs" | "no_plans" | "no_habit_logs" | "no_checkins" | "no_sleep_logs" | "pattern_engine_unavailable" | "previous_week_unavailable" | "previous_week_insufficient")[];
+                            };
+                        };
+                    };
+                };
+                /** @description Validation failed. `details` names the offending fields. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorEnvelope"];
+                    };
+                };
+                /** @description Missing, expired or invalid token. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorEnvelope"];
+                    };
+                };
+                /** @description Rate limit exceeded. Carries a `Retry-After` header. */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorEnvelope"];
+                    };
+                };
+                /** @description Unexpected failure. The cause is logged; quote `requestId` to find it. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorEnvelope"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/insights/weekly/story": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        weekStart?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @enum {string} */
+                            status: "ready" | "insufficient_data" | "disabled";
+                            report: {
+                                period: {
+                                    weekStart: string;
+                                    weekEnd: string;
+                                    timezone: string;
+                                    daysInPeriod: number;
+                                    daysElapsed: number;
+                                    isComplete: boolean;
+                                };
+                                coverage: {
+                                    daysTracked: number;
+                                    daysElapsed: number;
+                                    rate: number | null;
+                                    /** @enum {string} */
+                                    status: "sufficient" | "insufficient_data";
+                                };
+                                days: {
+                                    localDate: string;
+                                    elapsed: boolean;
+                                    tracked: boolean | null;
+                                    eventsLogged: number | null;
+                                    mealsLogged: number | null;
+                                    /** @enum {string|null} */
+                                    mood: "low" | "okay" | "good" | "great" | null;
+                                }[];
+                                nutrition: {
+                                    /** @enum {string} */
+                                    status: "ok" | "no_data";
+                                    daysWithConfirmedMeals: number;
+                                    coverage: number | null;
+                                    confirmedMeals: number | null;
+                                    averageMealsPerLoggedDay: number | null;
+                                    distinctFoods: number | null;
+                                    itemsNeedingReview: number | null;
+                                };
+                                activity: {
+                                    /** @enum {string} */
+                                    status: "ok" | "no_data";
+                                    activeDays: number;
+                                    walks: number | null;
+                                    workoutSessions: {
+                                        completed: number;
+                                        partial: number;
+                                        skipped: number;
+                                    } | null;
+                                };
+                                plan: {
+                                    /** @enum {string} */
+                                    status: "ok" | "no_data";
+                                    daysWithPlan: number;
+                                    plannedItems: number | null;
+                                    resolvedItems: number | null;
+                                    happenedItems: number | null;
+                                    pendingItems: number | null;
+                                    adherenceRate: number | null;
+                                    byAdherence: {
+                                        pending: number;
+                                        on_time: number;
+                                        shifted: number;
+                                        substituted: number;
+                                        not_logged: number;
+                                    } | null;
+                                    activity: {
+                                        planned: number;
+                                        resolved: number;
+                                        happened: number;
+                                        rate: number | null;
+                                    } | null;
+                                };
+                                habits: {
+                                    /** @enum {string} */
+                                    status: "ok" | "no_data";
+                                    daysWithLogs: number;
+                                    trackedHabits: number | null;
+                                    logs: {
+                                        done: number;
+                                        partial: number;
+                                        skipped: number;
+                                    } | null;
+                                    completionRate: number | null;
+                                };
+                                checkins: {
+                                    /** @enum {string} */
+                                    status: "ok" | "no_data";
+                                    daysWithCheckin: number;
+                                    moodCounts: {
+                                        low: number;
+                                        okay: number;
+                                        good: number;
+                                        great: number;
+                                    } | null;
+                                    dayTagCounts: {
+                                        normal: number;
+                                        busy: number;
+                                        better_than_expected: number;
+                                        not_as_planned: number;
+                                    } | null;
+                                    averageEnergy: number | null;
+                                    energySamples: number | null;
+                                };
+                                sleep: {
+                                    /** @enum {string} */
+                                    status: "ok" | "no_data";
+                                    daysWithSleep: number;
+                                    averageSleepMinutes: number | null;
+                                };
+                                comparison: {
+                                    previousWeekStart: string;
+                                    /** @enum {string} */
+                                    status: "available" | "insufficient_data" | "unavailable";
+                                    metrics: {
+                                        /** @enum {string} */
+                                        metric: "logging_coverage" | "meal_logging_coverage" | "plan_adherence" | "habit_completion";
+                                        /** @enum {string} */
+                                        status: "available" | "insufficient_data" | "unavailable";
+                                        current: number | null;
+                                        previous: number | null;
+                                        delta: number | null;
+                                        /** @enum {string|null} */
+                                        direction: "up" | "down" | "flat" | null;
+                                    }[];
+                                };
+                                patterns: {
+                                    /** @enum {string} */
+                                    status: "unavailable" | "none" | "available";
+                                    items: {
+                                        id: string;
+                                        /** @enum {string} */
+                                        kind: "correlation" | "trend" | "timing" | "frequency" | "streak";
+                                        subjectMetric: string;
+                                        subjectLabel: string;
+                                        objectMetric: string | null;
+                                        objectLabel: string | null;
+                                        /** @enum {string} */
+                                        direction: "positive" | "negative" | "none";
+                                        strength: number;
+                                        pValue: number | null;
+                                        sampleSize: number;
+                                        windowDays: number;
+                                        coverage: number;
+                                        caveat: string;
+                                    }[];
+                                };
+                                dataQuality: {
+                                    limitations: ("week_in_progress" | "insufficient_logging_coverage" | "no_meal_logs" | "meal_items_unresolved" | "no_activity_logs" | "no_plans" | "no_habit_logs" | "no_checkins" | "no_sleep_logs" | "pattern_engine_unavailable" | "previous_week_unavailable" | "previous_week_insufficient")[];
+                                };
+                            };
+                            story: {
+                                promptVersion: string;
+                                headline: string;
+                                summary: {
+                                    text: string;
+                                    evidence: string[];
+                                };
+                                highlights: {
+                                    text: string;
+                                    evidence: string[];
+                                    /** @enum {string} */
+                                    type: "fact" | "comparison";
+                                }[];
+                                patterns: {
+                                    patternId: string;
+                                    statement: string;
+                                    caveat: string;
+                                    evidence: string[];
+                                }[];
+                                interpretations: {
+                                    text: string;
+                                    evidence: string[];
+                                }[];
+                                suggestions: {
+                                    text: string;
+                                    evidence: string[];
+                                }[];
+                                caveats: {
+                                    text: string;
+                                    evidence: string[];
+                                }[];
+                            } | null;
+                        };
+                    };
+                };
+                /** @description Validation failed. `details` names the offending fields. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorEnvelope"];
+                    };
+                };
+                /** @description Missing, expired or invalid token. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorEnvelope"];
+                    };
+                };
+                /** @description Rate limit exceeded. Carries a `Retry-After` header. */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorEnvelope"];
+                    };
+                };
+                /** @description Unexpected failure. The cause is logged; quote `requestId` to find it. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorEnvelope"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {

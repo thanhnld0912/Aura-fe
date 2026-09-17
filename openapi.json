@@ -6937,6 +6937,1835 @@
           }
         }
       }
+    },
+    "/api/insights/weekly": {
+      "get": {
+        "tags": [
+          "Insights"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            "in": "query",
+            "name": "weekStart",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "period": {
+                      "type": "object",
+                      "properties": {
+                        "weekStart": {
+                          "type": "string"
+                        },
+                        "weekEnd": {
+                          "type": "string"
+                        },
+                        "timezone": {
+                          "type": "string"
+                        },
+                        "daysInPeriod": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "daysElapsed": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "isComplete": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "weekStart",
+                        "weekEnd",
+                        "timezone",
+                        "daysInPeriod",
+                        "daysElapsed",
+                        "isComplete"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "coverage": {
+                      "type": "object",
+                      "properties": {
+                        "daysTracked": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "daysElapsed": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "rate": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1,
+                          "nullable": true
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "sufficient",
+                            "insufficient_data"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "daysTracked",
+                        "daysElapsed",
+                        "rate",
+                        "status"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "days": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "localDate": {
+                            "type": "string"
+                          },
+                          "elapsed": {
+                            "type": "boolean"
+                          },
+                          "tracked": {
+                            "type": "boolean",
+                            "nullable": true
+                          },
+                          "eventsLogged": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "nullable": true
+                          },
+                          "mealsLogged": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "nullable": true
+                          },
+                          "mood": {
+                            "type": "string",
+                            "enum": [
+                              "low",
+                              "okay",
+                              "good",
+                              "great"
+                            ],
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "localDate",
+                          "elapsed",
+                          "tracked",
+                          "eventsLogged",
+                          "mealsLogged",
+                          "mood"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "nutrition": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "ok",
+                            "no_data"
+                          ]
+                        },
+                        "daysWithConfirmedMeals": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "coverage": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1,
+                          "nullable": true
+                        },
+                        "confirmedMeals": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "nullable": true
+                        },
+                        "averageMealsPerLoggedDay": {
+                          "type": "number",
+                          "minimum": 0,
+                          "nullable": true
+                        },
+                        "distinctFoods": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "nullable": true
+                        },
+                        "itemsNeedingReview": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "daysWithConfirmedMeals",
+                        "coverage",
+                        "confirmedMeals",
+                        "averageMealsPerLoggedDay",
+                        "distinctFoods",
+                        "itemsNeedingReview"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "activity": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "ok",
+                            "no_data"
+                          ]
+                        },
+                        "activeDays": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "walks": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "nullable": true
+                        },
+                        "workoutSessions": {
+                          "type": "object",
+                          "properties": {
+                            "completed": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "partial": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "skipped": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "completed",
+                            "partial",
+                            "skipped"
+                          ],
+                          "additionalProperties": false,
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "activeDays",
+                        "walks",
+                        "workoutSessions"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "plan": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "ok",
+                            "no_data"
+                          ]
+                        },
+                        "daysWithPlan": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "plannedItems": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "nullable": true
+                        },
+                        "resolvedItems": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "nullable": true
+                        },
+                        "happenedItems": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "nullable": true
+                        },
+                        "pendingItems": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "nullable": true
+                        },
+                        "adherenceRate": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1,
+                          "nullable": true
+                        },
+                        "byAdherence": {
+                          "type": "object",
+                          "properties": {
+                            "pending": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "on_time": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "shifted": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "substituted": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "not_logged": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "pending",
+                            "on_time",
+                            "shifted",
+                            "substituted",
+                            "not_logged"
+                          ],
+                          "additionalProperties": false,
+                          "nullable": true
+                        },
+                        "activity": {
+                          "type": "object",
+                          "properties": {
+                            "planned": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "resolved": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "happened": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "rate": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1,
+                              "nullable": true
+                            }
+                          },
+                          "required": [
+                            "planned",
+                            "resolved",
+                            "happened",
+                            "rate"
+                          ],
+                          "additionalProperties": false,
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "daysWithPlan",
+                        "plannedItems",
+                        "resolvedItems",
+                        "happenedItems",
+                        "pendingItems",
+                        "adherenceRate",
+                        "byAdherence",
+                        "activity"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "habits": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "ok",
+                            "no_data"
+                          ]
+                        },
+                        "daysWithLogs": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "trackedHabits": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "nullable": true
+                        },
+                        "logs": {
+                          "type": "object",
+                          "properties": {
+                            "done": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "partial": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "skipped": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "done",
+                            "partial",
+                            "skipped"
+                          ],
+                          "additionalProperties": false,
+                          "nullable": true
+                        },
+                        "completionRate": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1,
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "daysWithLogs",
+                        "trackedHabits",
+                        "logs",
+                        "completionRate"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "checkins": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "ok",
+                            "no_data"
+                          ]
+                        },
+                        "daysWithCheckin": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "moodCounts": {
+                          "type": "object",
+                          "properties": {
+                            "low": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "okay": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "good": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "great": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "low",
+                            "okay",
+                            "good",
+                            "great"
+                          ],
+                          "additionalProperties": false,
+                          "nullable": true
+                        },
+                        "dayTagCounts": {
+                          "type": "object",
+                          "properties": {
+                            "normal": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "busy": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "better_than_expected": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "not_as_planned": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "normal",
+                            "busy",
+                            "better_than_expected",
+                            "not_as_planned"
+                          ],
+                          "additionalProperties": false,
+                          "nullable": true
+                        },
+                        "averageEnergy": {
+                          "type": "number",
+                          "minimum": 1,
+                          "maximum": 5,
+                          "nullable": true
+                        },
+                        "energySamples": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "daysWithCheckin",
+                        "moodCounts",
+                        "dayTagCounts",
+                        "averageEnergy",
+                        "energySamples"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "sleep": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "ok",
+                            "no_data"
+                          ]
+                        },
+                        "daysWithSleep": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "averageSleepMinutes": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "daysWithSleep",
+                        "averageSleepMinutes"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "comparison": {
+                      "type": "object",
+                      "properties": {
+                        "previousWeekStart": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "available",
+                            "insufficient_data",
+                            "unavailable"
+                          ]
+                        },
+                        "metrics": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "metric": {
+                                "type": "string",
+                                "enum": [
+                                  "logging_coverage",
+                                  "meal_logging_coverage",
+                                  "plan_adherence",
+                                  "habit_completion"
+                                ]
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "available",
+                                  "insufficient_data",
+                                  "unavailable"
+                                ]
+                              },
+                              "current": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1,
+                                "nullable": true
+                              },
+                              "previous": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1,
+                                "nullable": true
+                              },
+                              "delta": {
+                                "type": "number",
+                                "minimum": -1,
+                                "maximum": 1,
+                                "nullable": true
+                              },
+                              "direction": {
+                                "type": "string",
+                                "enum": [
+                                  "up",
+                                  "down",
+                                  "flat"
+                                ],
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "metric",
+                              "status",
+                              "current",
+                              "previous",
+                              "delta",
+                              "direction"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "previousWeekStart",
+                        "status",
+                        "metrics"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "patterns": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "unavailable",
+                            "none",
+                            "available"
+                          ]
+                        },
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "correlation",
+                                  "trend",
+                                  "timing",
+                                  "frequency",
+                                  "streak"
+                                ]
+                              },
+                              "subjectMetric": {
+                                "type": "string"
+                              },
+                              "subjectLabel": {
+                                "type": "string"
+                              },
+                              "objectMetric": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "objectLabel": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "direction": {
+                                "type": "string",
+                                "enum": [
+                                  "positive",
+                                  "negative",
+                                  "none"
+                                ]
+                              },
+                              "strength": {
+                                "type": "number",
+                                "minimum": -1,
+                                "maximum": 1
+                              },
+                              "pValue": {
+                                "type": "number",
+                                "nullable": true
+                              },
+                              "sampleSize": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "windowDays": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "coverage": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              "caveat": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "kind",
+                              "subjectMetric",
+                              "subjectLabel",
+                              "objectMetric",
+                              "objectLabel",
+                              "direction",
+                              "strength",
+                              "pValue",
+                              "sampleSize",
+                              "windowDays",
+                              "coverage",
+                              "caveat"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "items"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "dataQuality": {
+                      "type": "object",
+                      "properties": {
+                        "limitations": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "week_in_progress",
+                              "insufficient_logging_coverage",
+                              "no_meal_logs",
+                              "meal_items_unresolved",
+                              "no_activity_logs",
+                              "no_plans",
+                              "no_habit_logs",
+                              "no_checkins",
+                              "no_sleep_logs",
+                              "pattern_engine_unavailable",
+                              "previous_week_unavailable",
+                              "previous_week_insufficient"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "limitations"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "period",
+                    "coverage",
+                    "days",
+                    "nutrition",
+                    "activity",
+                    "plan",
+                    "habits",
+                    "checkins",
+                    "sleep",
+                    "comparison",
+                    "patterns",
+                    "dataQuality"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed. `details` names the offending fields.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or invalid token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded. Carries a `Retry-After` header.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected failure. The cause is logged; quote `requestId` to find it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/insights/weekly/story": {
+      "post": {
+        "tags": [
+          "Insights"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "weekStart": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ready",
+                        "insufficient_data",
+                        "disabled"
+                      ]
+                    },
+                    "report": {
+                      "type": "object",
+                      "properties": {
+                        "period": {
+                          "type": "object",
+                          "properties": {
+                            "weekStart": {
+                              "type": "string"
+                            },
+                            "weekEnd": {
+                              "type": "string"
+                            },
+                            "timezone": {
+                              "type": "string"
+                            },
+                            "daysInPeriod": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "daysElapsed": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "isComplete": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "weekStart",
+                            "weekEnd",
+                            "timezone",
+                            "daysInPeriod",
+                            "daysElapsed",
+                            "isComplete"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "coverage": {
+                          "type": "object",
+                          "properties": {
+                            "daysTracked": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "daysElapsed": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "rate": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1,
+                              "nullable": true
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "sufficient",
+                                "insufficient_data"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "daysTracked",
+                            "daysElapsed",
+                            "rate",
+                            "status"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "days": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "localDate": {
+                                "type": "string"
+                              },
+                              "elapsed": {
+                                "type": "boolean"
+                              },
+                              "tracked": {
+                                "type": "boolean",
+                                "nullable": true
+                              },
+                              "eventsLogged": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "nullable": true
+                              },
+                              "mealsLogged": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "nullable": true
+                              },
+                              "mood": {
+                                "type": "string",
+                                "enum": [
+                                  "low",
+                                  "okay",
+                                  "good",
+                                  "great"
+                                ],
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "localDate",
+                              "elapsed",
+                              "tracked",
+                              "eventsLogged",
+                              "mealsLogged",
+                              "mood"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "nutrition": {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "ok",
+                                "no_data"
+                              ]
+                            },
+                            "daysWithConfirmedMeals": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "coverage": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1,
+                              "nullable": true
+                            },
+                            "confirmedMeals": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "nullable": true
+                            },
+                            "averageMealsPerLoggedDay": {
+                              "type": "number",
+                              "minimum": 0,
+                              "nullable": true
+                            },
+                            "distinctFoods": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "nullable": true
+                            },
+                            "itemsNeedingReview": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "nullable": true
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "daysWithConfirmedMeals",
+                            "coverage",
+                            "confirmedMeals",
+                            "averageMealsPerLoggedDay",
+                            "distinctFoods",
+                            "itemsNeedingReview"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "activity": {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "ok",
+                                "no_data"
+                              ]
+                            },
+                            "activeDays": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "walks": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "nullable": true
+                            },
+                            "workoutSessions": {
+                              "type": "object",
+                              "properties": {
+                                "completed": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                },
+                                "partial": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                },
+                                "skipped": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": [
+                                "completed",
+                                "partial",
+                                "skipped"
+                              ],
+                              "additionalProperties": false,
+                              "nullable": true
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "activeDays",
+                            "walks",
+                            "workoutSessions"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "plan": {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "ok",
+                                "no_data"
+                              ]
+                            },
+                            "daysWithPlan": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "plannedItems": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "nullable": true
+                            },
+                            "resolvedItems": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "nullable": true
+                            },
+                            "happenedItems": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "nullable": true
+                            },
+                            "pendingItems": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "nullable": true
+                            },
+                            "adherenceRate": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1,
+                              "nullable": true
+                            },
+                            "byAdherence": {
+                              "type": "object",
+                              "properties": {
+                                "pending": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                },
+                                "on_time": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                },
+                                "shifted": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                },
+                                "substituted": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                },
+                                "not_logged": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": [
+                                "pending",
+                                "on_time",
+                                "shifted",
+                                "substituted",
+                                "not_logged"
+                              ],
+                              "additionalProperties": false,
+                              "nullable": true
+                            },
+                            "activity": {
+                              "type": "object",
+                              "properties": {
+                                "planned": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                },
+                                "resolved": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                },
+                                "happened": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                },
+                                "rate": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1,
+                                  "nullable": true
+                                }
+                              },
+                              "required": [
+                                "planned",
+                                "resolved",
+                                "happened",
+                                "rate"
+                              ],
+                              "additionalProperties": false,
+                              "nullable": true
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "daysWithPlan",
+                            "plannedItems",
+                            "resolvedItems",
+                            "happenedItems",
+                            "pendingItems",
+                            "adherenceRate",
+                            "byAdherence",
+                            "activity"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "habits": {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "ok",
+                                "no_data"
+                              ]
+                            },
+                            "daysWithLogs": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "trackedHabits": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "nullable": true
+                            },
+                            "logs": {
+                              "type": "object",
+                              "properties": {
+                                "done": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                },
+                                "partial": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                },
+                                "skipped": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": [
+                                "done",
+                                "partial",
+                                "skipped"
+                              ],
+                              "additionalProperties": false,
+                              "nullable": true
+                            },
+                            "completionRate": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1,
+                              "nullable": true
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "daysWithLogs",
+                            "trackedHabits",
+                            "logs",
+                            "completionRate"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "checkins": {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "ok",
+                                "no_data"
+                              ]
+                            },
+                            "daysWithCheckin": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "moodCounts": {
+                              "type": "object",
+                              "properties": {
+                                "low": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                },
+                                "okay": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                },
+                                "good": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                },
+                                "great": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": [
+                                "low",
+                                "okay",
+                                "good",
+                                "great"
+                              ],
+                              "additionalProperties": false,
+                              "nullable": true
+                            },
+                            "dayTagCounts": {
+                              "type": "object",
+                              "properties": {
+                                "normal": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                },
+                                "busy": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                },
+                                "better_than_expected": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                },
+                                "not_as_planned": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": [
+                                "normal",
+                                "busy",
+                                "better_than_expected",
+                                "not_as_planned"
+                              ],
+                              "additionalProperties": false,
+                              "nullable": true
+                            },
+                            "averageEnergy": {
+                              "type": "number",
+                              "minimum": 1,
+                              "maximum": 5,
+                              "nullable": true
+                            },
+                            "energySamples": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "nullable": true
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "daysWithCheckin",
+                            "moodCounts",
+                            "dayTagCounts",
+                            "averageEnergy",
+                            "energySamples"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "sleep": {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "ok",
+                                "no_data"
+                              ]
+                            },
+                            "daysWithSleep": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "averageSleepMinutes": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "nullable": true
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "daysWithSleep",
+                            "averageSleepMinutes"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "comparison": {
+                          "type": "object",
+                          "properties": {
+                            "previousWeekStart": {
+                              "type": "string"
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "available",
+                                "insufficient_data",
+                                "unavailable"
+                              ]
+                            },
+                            "metrics": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "metric": {
+                                    "type": "string",
+                                    "enum": [
+                                      "logging_coverage",
+                                      "meal_logging_coverage",
+                                      "plan_adherence",
+                                      "habit_completion"
+                                    ]
+                                  },
+                                  "status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "available",
+                                      "insufficient_data",
+                                      "unavailable"
+                                    ]
+                                  },
+                                  "current": {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 1,
+                                    "nullable": true
+                                  },
+                                  "previous": {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 1,
+                                    "nullable": true
+                                  },
+                                  "delta": {
+                                    "type": "number",
+                                    "minimum": -1,
+                                    "maximum": 1,
+                                    "nullable": true
+                                  },
+                                  "direction": {
+                                    "type": "string",
+                                    "enum": [
+                                      "up",
+                                      "down",
+                                      "flat"
+                                    ],
+                                    "nullable": true
+                                  }
+                                },
+                                "required": [
+                                  "metric",
+                                  "status",
+                                  "current",
+                                  "previous",
+                                  "delta",
+                                  "direction"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "previousWeekStart",
+                            "status",
+                            "metrics"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "patterns": {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "unavailable",
+                                "none",
+                                "available"
+                              ]
+                            },
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "correlation",
+                                      "trend",
+                                      "timing",
+                                      "frequency",
+                                      "streak"
+                                    ]
+                                  },
+                                  "subjectMetric": {
+                                    "type": "string"
+                                  },
+                                  "subjectLabel": {
+                                    "type": "string"
+                                  },
+                                  "objectMetric": {
+                                    "type": "string",
+                                    "nullable": true
+                                  },
+                                  "objectLabel": {
+                                    "type": "string",
+                                    "nullable": true
+                                  },
+                                  "direction": {
+                                    "type": "string",
+                                    "enum": [
+                                      "positive",
+                                      "negative",
+                                      "none"
+                                    ]
+                                  },
+                                  "strength": {
+                                    "type": "number",
+                                    "minimum": -1,
+                                    "maximum": 1
+                                  },
+                                  "pValue": {
+                                    "type": "number",
+                                    "nullable": true
+                                  },
+                                  "sampleSize": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  },
+                                  "windowDays": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  },
+                                  "coverage": {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 1
+                                  },
+                                  "caveat": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "kind",
+                                  "subjectMetric",
+                                  "subjectLabel",
+                                  "objectMetric",
+                                  "objectLabel",
+                                  "direction",
+                                  "strength",
+                                  "pValue",
+                                  "sampleSize",
+                                  "windowDays",
+                                  "coverage",
+                                  "caveat"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "items"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "dataQuality": {
+                          "type": "object",
+                          "properties": {
+                            "limitations": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "week_in_progress",
+                                  "insufficient_logging_coverage",
+                                  "no_meal_logs",
+                                  "meal_items_unresolved",
+                                  "no_activity_logs",
+                                  "no_plans",
+                                  "no_habit_logs",
+                                  "no_checkins",
+                                  "no_sleep_logs",
+                                  "pattern_engine_unavailable",
+                                  "previous_week_unavailable",
+                                  "previous_week_insufficient"
+                                ]
+                              }
+                            }
+                          },
+                          "required": [
+                            "limitations"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "period",
+                        "coverage",
+                        "days",
+                        "nutrition",
+                        "activity",
+                        "plan",
+                        "habits",
+                        "checkins",
+                        "sleep",
+                        "comparison",
+                        "patterns",
+                        "dataQuality"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "story": {
+                      "type": "object",
+                      "properties": {
+                        "promptVersion": {
+                          "type": "string"
+                        },
+                        "headline": {
+                          "type": "string"
+                        },
+                        "summary": {
+                          "type": "object",
+                          "properties": {
+                            "text": {
+                              "type": "string"
+                            },
+                            "evidence": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "text",
+                            "evidence"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "highlights": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "text": {
+                                "type": "string"
+                              },
+                              "evidence": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "fact",
+                                  "comparison"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "text",
+                              "evidence",
+                              "type"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "patterns": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "patternId": {
+                                "type": "string"
+                              },
+                              "statement": {
+                                "type": "string"
+                              },
+                              "caveat": {
+                                "type": "string"
+                              },
+                              "evidence": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "required": [
+                              "patternId",
+                              "statement",
+                              "caveat",
+                              "evidence"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "interpretations": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "text": {
+                                "type": "string"
+                              },
+                              "evidence": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "required": [
+                              "text",
+                              "evidence"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "suggestions": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "text": {
+                                "type": "string"
+                              },
+                              "evidence": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "required": [
+                              "text",
+                              "evidence"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "caveats": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "text": {
+                                "type": "string"
+                              },
+                              "evidence": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "required": [
+                              "text",
+                              "evidence"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "promptVersion",
+                        "headline",
+                        "summary",
+                        "highlights",
+                        "patterns",
+                        "interpretations",
+                        "suggestions",
+                        "caveats"
+                      ],
+                      "additionalProperties": false,
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "report",
+                    "story"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed. `details` names the offending fields.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or invalid token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded. Carries a `Retry-After` header.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected failure. The cause is logged; quote `requestId` to find it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "servers": [
@@ -6982,6 +8811,10 @@
     {
       "name": "Nutrition",
       "description": "Food search, deterministic calculation and totals."
+    },
+    {
+      "name": "Insights",
+      "description": "Weekly facts from logged data, and the story written from them."
     }
   ]
 }
