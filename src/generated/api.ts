@@ -3826,6 +3826,109 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/agent/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        message: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @enum {string} */
+                            kind: "answer" | "boundary" | "support" | "disabled";
+                            /** @enum {string} */
+                            intent: "today" | "weekly" | "general" | "patterns" | "habits" | "plan" | "meals" | "nutrition" | "activity" | "checkins";
+                            answer: {
+                                text: string;
+                                evidence: string[];
+                            };
+                            sections: {
+                                text: string;
+                                evidence: string[];
+                                /** @enum {string} */
+                                kind: "fact" | "interpretation" | "general";
+                                title: string;
+                            }[];
+                            suggestions: {
+                                text: string;
+                                evidence: string[];
+                            }[];
+                            caveats: {
+                                text: string;
+                                evidence: string[];
+                            }[];
+                            usedContext: string[];
+                            promptVersion: string | null;
+                        };
+                    };
+                };
+                /** @description Validation failed. `details` names the offending fields. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorEnvelope"];
+                    };
+                };
+                /** @description Missing, expired or invalid token. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorEnvelope"];
+                    };
+                };
+                /** @description Rate limit exceeded. Carries a `Retry-After` header. */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorEnvelope"];
+                    };
+                };
+                /** @description Unexpected failure. The cause is logged; quote `requestId` to find it. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorEnvelope"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
