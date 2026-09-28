@@ -114,6 +114,32 @@ export type MealItemInput = Body<'/api/nutrition/calculate', 'post'>['items'][nu
 export type MealUnit = MealItemInput['unit'];
 export type SizeLabel = NonNullable<MealItemInput['sizeLabel']>;
 
+// ── The day: events and the plan ───────────────────────────────────────────────
+
+/** One thing that happened, as `GET /api/events/today` lists it. */
+export type DayEvent = Response<'/api/events/today', 'get', 200>['data'][number];
+export type EventType = DayEvent['type'];
+
+/**
+ * Plan vs actual for one day. Every judgement in it — which event satisfied which plan
+ * item, whether it was on time, the adherence percentage — is the backend's
+ * reconciliation (`daily-plans/reconciliation.ts`); the frontend only renders it.
+ */
+export type PlanComparison = Response<'/api/daily-plan/comparison', 'get', 200>;
+export type PlanComparisonItem = PlanComparison['items'][number];
+export type Adherence = PlanComparisonItem['adherence'];
+
+// ── Check-ins ──────────────────────────────────────────────────────────────────
+
+/**
+ * One day's check-in. The server keeps one per local day and upserts it: a second save
+ * replaces the first — including any field left out, which becomes null.
+ */
+export type Checkin = Response<'/api/checkins', 'post', 201>;
+export type CheckinInput = Body<'/api/checkins', 'post'>;
+export type Mood = CheckinInput['mood'];
+export type DayTag = NonNullable<CheckinInput['dayTag']>;
+
 // ── Auth ───────────────────────────────────────────────────────────────────────
 
 export type SessionResponse = Response<'/api/auth/session', 'post', 200>;
@@ -144,9 +170,19 @@ export const SIZE_LABELS = ['small', 'medium', 'large', 'custom'] as const;
 /** Fails to compile unless `A` and `B` are the same union, in both directions. */
 type Exact<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
 
+export const MOODS = ['low', 'okay', 'good', 'great'] as const;
+export const DAY_TAGS = ['normal', 'busy', 'better_than_expected', 'not_as_planned'] as const;
+
 // Referenced by the assertions below; `void` keeps them from being unused exports.
 type UnitsMatch = Exact<(typeof MEAL_UNITS)[number], MealUnit>;
 type SizesMatch = Exact<(typeof SIZE_LABELS)[number], SizeLabel>;
+type MoodsMatch = Exact<(typeof MOODS)[number], Mood>;
+type DayTagsMatch = Exact<(typeof DAY_TAGS)[number], DayTag>;
 
 /** Compile-time only: a drifted enum makes one of these `never` and the build fails. */
-export const CONTRACT_ENUMS_MATCH: [UnitsMatch, SizesMatch] = [true, true];
+export const CONTRACT_ENUMS_MATCH: [UnitsMatch, SizesMatch, MoodsMatch, DayTagsMatch] = [
+  true,
+  true,
+  true,
+  true,
+];

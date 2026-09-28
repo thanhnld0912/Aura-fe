@@ -1,21 +1,48 @@
-import React, { useState } from 'react';
-import { ApiError } from '../lib/api';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useAuth } from '../auth/AuthProvider';
+import { useCheckin } from '../hooks/useCheckin';
+import { ApiError, DAY_TAGS, NetworkError, type DayTag } from '../lib/api';
+import {
+  DAY_TAG_LABEL,
+  findTodaysCheckin,
+  formFromCheckin,
+  isMood,
+  sameForm,
+  toCheckinInput,
+  type CheckinForm,
+} from '../lib/checkin';
+import {
+  eventsToSection,
+  formatClock,
+  formatDayHeading,
+  greetingName,
+  pickSpotlight,
+  planHeadline,
+  summarisePlan,
+} from '../lib/today';
 import type { TodayMealsState } from '../hooks/useTodayMeals';
+import type { TodayPlanState } from '../hooks/useTodayPlan';
 
 /**
  * The request id, when the failure came back from the server rather than from a dead
  * socket. Quoting it lets a support conversation find the exact request in the log.
  */
-function requestIdOf(error: TodayMealsState['error']): string | undefined {
+function requestIdOf(error: ApiError | NetworkError | null): string | undefined {
   return error instanceof ApiError ? error.requestId : undefined;
 }
 
+/** Badge colours, reused from the timeline's own badge palette. */
+const TONE_CLASS = {
+  success: 'bg-[#adedd0] text-[#306d56]',
+  neutral: 'bg-[#eee7e1] text-[#56423b]',
+  warning: 'bg-[#ffdad6] text-[#93000a]',
+} as const;
+
 interface TodayViewProps {
-  /**
-   * Today's Story, from the API. The rest of this view is still prototype content;
-   * this one card is the first that shows the user their own data.
-   */
+  /** Today's Story: meals, from `GET /api/meals/today`. */
   today: TodayMealsState;
+  /** The plan comparison and the day's other events, from the API. */
+  plan: TodayPlanState;
   onOpenLogModal: (initialPrompt?: string) => void;
   onSelectMood: (mood: string) => void;
   selectedMood: string;
@@ -23,14 +50,85 @@ interface TodayViewProps {
 
 export const TodayView: React.FC<TodayViewProps> = ({
   today,
+  plan,
   onOpenLogModal,
   onSelectMood,
   selectedMood,
 }) => {
-  const [selectedTag, setSelectedTag] = useState<string>('Pretty normal');
+  const { user } = useAuth();
+  const timeZone = user?.timezone ?? undefined;
+  const name = greetingName(user);
+
+  const comparison = plan.plan.status === 'success' ? plan.plan.data : null;
+  const summary = comparison ? summarisePlan(comparison) : null;
+  const spotlight = pickSpotlight(comparison);
+  const moments =
+    plan.events.status === 'success' ? eventsToSection(plan.events.data, timeZone) : null;
+  const sections = moments ? [...today.sections, moments] : today.sections;
+
+  // When the day was last read from the server — the only honest time to print beside
+  // "synced". Recomputed on each successful load, never ticking on its own.
+  const syncedAt = useMemo(
+    () => (plan.events.status === 'success' ? new Date() : null),
+    [plan.events.status, plan.events.data],
+  );
+  const dayHeading = formatDayHeading(syncedAt ?? new Date(), timeZone);
+  const ringPct = summary?.adherencePct ?? null;
+
+  const [selectedTag, setSelectedTag] = useState<DayTag | null>('normal');
   const [showNoteInput, setShowNoteInput] = useState(false);
   const [checkInNote, setCheckInNote] = useState('');
-  const [noteSaved, setNoteSaved] = useState(false);
+
+  // ── Check-in: persisted through `POST /api/checkins`, never assumed ───────────
+  // A successful save reloads today's events, which is how the check-in reaches
+  // "Other moments" — the server's event, through the same read as every other one.
+  const checkin = useCheckin({ onSaved: plan.reload });
+
+  /** What the server holds for today: the last save, else today's from the recent list. */
+  const fromServer =
+    checkin.recent.status === 'success' && plan.events.status === 'success'
+      ? findTodaysCheckin(checkin.recent.data, plan.events.data)
+      : null;
+  const savedCheckin = checkin.lastSaved ?? fromServer;
+  const savedForm = savedCheckin ? formFromCheckin(savedCheckin) : null;
+
+  const form: CheckinForm | null = isMood(selectedMood)
+    ? { mood: selectedMood, dayTag: selectedTag, note: checkInNote }
+    : null;
+  const dirty = !savedForm || !form || !sameForm(form, savedForm);
+  const saving = checkin.saveStatus === 'saving';
+
+  /**
+   * Show today's saved answer once, unless the person has already started changing it.
+   * Without this a reload would show the defaults as "not saved" — and since the server
+   * clears any field a save leaves out, saving them would erase this morning's note.
+   */
+  const touched = useRef(false);
+  const prefilled = useRef(false);
+  useEffect(() => {
+    if (!fromServer || prefilled.current || touched.current) return;
+    prefilled.current = true;
+    const saved = formFromCheckin(fromServer);
+    onSelectMood(saved.mood);
+    setSelectedTag(saved.dayTag);
+    setCheckInNote(saved.note);
+  }, [fromServer, onSelectMood]);
+
+  const handleSaveCheckin = async () => {
+    if (!form || saving) return;
+    const saved = await checkin.save(toCheckinInput(form));
+    if (saved) setShowNoteInput(false);
+  };
+
+  const status = saving
+    ? { text: 'Saving…', className: 'text-[#8a726a]' }
+    : checkin.saveStatus === 'error'
+      ? { text: "Couldn't save", className: 'text-[#93000a]' }
+      : !dirty
+        ? { text: 'Saved', className: 'text-[#2b6952]' }
+        : savedCheckin
+          ? { text: 'Unsaved changes', className: 'text-[#9f4118]' }
+          : { text: 'Not saved yet', className: 'text-[#8a726a]' };
 
   const moodOptions = [
     { id: 'low', emoji: '🥱', label: 'Low energy' },
@@ -39,20 +137,6 @@ export const TodayView: React.FC<TodayViewProps> = ({
     { id: 'great', emoji: '✨', label: 'Great' },
   ];
 
-  const tagOptions = [
-    'Pretty normal',
-    'Busy',
-    'Better than expected',
-    "Didn't go as planned",
-  ];
-
-  const handleSaveNote = () => {
-    setNoteSaved(true);
-    setTimeout(() => {
-      setShowNoteInput(false);
-      setNoteSaved(false);
-    }, 1200);
-  };
 
   return (
     <div className="w-full max-w-4xl mx-auto px-4 py-8 space-y-8 animate-in fade-in duration-300">
@@ -62,15 +146,21 @@ export const TodayView: React.FC<TodayViewProps> = ({
           <div className="flex items-center gap-2 text-xs font-bold text-[#9f4118] uppercase tracking-wider">
             <span>Daily Rhythm</span>
             <span>•</span>
-            <span className="text-[#56423b] font-medium">Friday, September 4</span>
+            <span className="text-[#56423b] font-medium">{dayHeading}</span>
           </div>
           <h1 className="text-3xl sm:text-4xl font-extrabold text-[#1e1b17] tracking-tight mt-1">
-            Hey Thanh 👋
+            {name ? `Hey ${name} 👋` : 'Hey there 👋'}
           </h1>
         </div>
         <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#faf2ec] border border-[#eee7e1] text-xs font-semibold text-[#56423b] self-start sm:self-center shadow-xs">
           <span className="w-2 h-2 rounded-full bg-[#2b6952] animate-pulse" />
-          <span>Synced with body clock · 16:45 PM</span>
+          <span>
+            {syncedAt
+              ? `Synced with body clock · ${formatClock(syncedAt, timeZone)}`
+              : plan.events.status === 'error'
+                ? 'Not synced'
+                : 'Syncing…'}
+          </span>
         </div>
       </div>
 
@@ -82,27 +172,60 @@ export const TodayView: React.FC<TodayViewProps> = ({
               <span className="text-xs font-bold uppercase tracking-wider text-[#9f4118]">
                 Today • Gentle Flow
               </span>
-              <span className="px-2 py-0.5 bg-[#adedd0] text-[#306d56] rounded-full text-[11px] font-bold">
-                Balance On Track
-              </span>
+              {/* The prototype's "Balance On Track" badge judged the day; nothing in the
+                  API makes that judgement, so no badge is shown in its place. */}
             </div>
-            <p className="text-base sm:text-lg text-[#1e1b17] font-medium leading-relaxed">
-              You're doing pretty well today. Your energy is staying steady despite schedule adjustments.
-            </p>
-            <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-[#56423b]">
-              <span className="px-2.5 py-1 bg-white rounded-full border border-[#eee7e1] font-semibold text-[#1e1b17]">
-                ✓ 3 things done
-              </span>
-              <span className="px-2.5 py-1 bg-[#ffdbce]/60 rounded-full border border-[#ffdbce] font-semibold text-[#7f2b01]">
-                ⚡ 1 changed
-              </span>
-              <span className="px-2.5 py-1 bg-[#faf2ec] rounded-full border border-[#eee7e1] font-semibold">
-                ⏳ 2 upcoming
-              </span>
-            </div>
+
+            {plan.plan.status === 'loading' && (
+              <p className="text-base sm:text-lg text-[#8a726a] font-medium leading-relaxed">
+                Gathering today's plan…
+              </p>
+            )}
+
+            {plan.plan.status === 'error' && (
+              <div className="space-y-2">
+                <p className="text-base sm:text-lg text-[#1e1b17] font-medium leading-relaxed">
+                  Could not load today's plan.
+                </p>
+                <p className="text-xs text-[#56423b]">{plan.plan.error?.message}</p>
+                {requestIdOf(plan.plan.error) && (
+                  <p className="text-[10px] text-[#bda99f] font-mono break-all">
+                    Request {requestIdOf(plan.plan.error)}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={plan.reload}
+                  className="px-4 py-1.5 rounded-full bg-[#ff8a5b] text-white text-xs font-bold hover:bg-[#f5763f] transition-colors"
+                >
+                  Try again
+                </button>
+              </div>
+            )}
+
+            {plan.plan.status === 'success' && (
+              <>
+                <p className="text-base sm:text-lg text-[#1e1b17] font-medium leading-relaxed">
+                  {planHeadline(summary)}
+                </p>
+                {summary && summary.total > 0 && (
+                  <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-[#56423b]">
+                    <span className="px-2.5 py-1 bg-white rounded-full border border-[#eee7e1] font-semibold text-[#1e1b17]">
+                      ✓ {summary.done} {summary.done === 1 ? 'thing' : 'things'} done
+                    </span>
+                    <span className="px-2.5 py-1 bg-[#ffdbce]/60 rounded-full border border-[#ffdbce] font-semibold text-[#7f2b01]">
+                      ⚡ {summary.changed} changed
+                    </span>
+                    <span className="px-2.5 py-1 bg-[#faf2ec] rounded-full border border-[#eee7e1] font-semibold">
+                      ⏳ {summary.upcoming} upcoming
+                    </span>
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
-          {/* 72% Flow Ring with SVG */}
+          {/* Adherence ring — the server's percentage, or a dash while there is none */}
           <div className="flex flex-col items-center justify-center relative flex-shrink-0">
             <div className="relative w-28 h-28 flex items-center justify-center">
               <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
@@ -121,20 +244,30 @@ export const TodayView: React.FC<TodayViewProps> = ({
                   stroke="#9f4118"
                   strokeWidth="8"
                   strokeDasharray="264"
-                  strokeDashoffset={264 - (264 * 72) / 100}
+                  strokeDashoffset={264 - (264 * (ringPct ?? 0)) / 100}
                   strokeLinecap="round"
                   fill="transparent"
                   className="transition-all duration-1000 ease-out"
                 />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                <span className="text-2xl font-black text-[#1e1b17] leading-none">72%</span>
+                <span className="text-2xl font-black text-[#1e1b17] leading-none">
+                  {ringPct === null ? '—' : `${ringPct}%`}
+                </span>
                 <span className="text-[10px] font-bold text-[#8a726a] uppercase tracking-wider mt-0.5">
                   Flow
                 </span>
               </div>
             </div>
-            <span className="text-[11px] text-[#56423b] mt-2 font-medium">Harmonious rhythm</span>
+            <span className="text-[11px] text-[#56423b] mt-2 font-medium">
+              {plan.plan.status !== 'success'
+                ? ''
+                : ringPct !== null
+                  ? 'Plan followed so far'
+                  : summary && summary.total > 0
+                    ? 'Nothing due yet'
+                    : 'No plan to follow'}
+            </span>
           </div>
         </div>
 
@@ -153,7 +286,20 @@ export const TodayView: React.FC<TodayViewProps> = ({
             </span>
             <h2 className="text-base font-bold text-[#1e1b17]">&lt; 20 SEC CHECK-IN</h2>
           </div>
-          <span className="text-xs text-[#2b6952] font-semibold">Saved automatically</span>
+          {/* Only claims "Saved" once the server has answered with the saved check-in. */}
+          <div className="flex items-center gap-2">
+            <span className={`text-xs font-semibold ${status.className}`} role="status">
+              {status.text}
+            </span>
+            <button
+              type="button"
+              onClick={handleSaveCheckin}
+              disabled={!form || saving || !dirty}
+              className="px-4 py-1 rounded-full text-xs font-bold bg-[#9f4118] text-white disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {saving ? 'Saving…' : checkin.saveStatus === 'error' ? 'Try again' : 'Save check-in'}
+            </button>
+          </div>
         </div>
 
         {/* Mood Selection Buttons */}
@@ -163,7 +309,11 @@ export const TodayView: React.FC<TodayViewProps> = ({
             return (
               <button
                 key={mood.id}
-                onClick={() => onSelectMood(mood.id)}
+                onClick={() => {
+                  touched.current = true;
+                  onSelectMood(mood.id);
+                }}
+                aria-pressed={isSelected}
                 className={`p-3 rounded-2xl border text-center transition-all duration-200 flex flex-col items-center gap-1.5 ${
                   isSelected
                     ? 'bg-[#ffdbce]/50 border-[#ff8a5b] text-[#7f2b01] shadow-xs scale-[1.02]'
@@ -180,12 +330,16 @@ export const TodayView: React.FC<TodayViewProps> = ({
 
         {/* Tag pills */}
         <div className="flex flex-wrap items-center gap-2 pt-1">
-          {tagOptions.map((tag) => {
+          {DAY_TAGS.map((tag) => {
             const isSelected = selectedTag === tag;
             return (
               <button
                 key={tag}
-                onClick={() => setSelectedTag(tag)}
+                onClick={() => {
+                  touched.current = true;
+                  setSelectedTag(tag);
+                }}
+                aria-pressed={isSelected}
                 className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
                   isSelected
                     ? 'bg-[#1e1b17] text-white'
@@ -193,7 +347,7 @@ export const TodayView: React.FC<TodayViewProps> = ({
                 }`}
                 type="button"
               >
-                {tag}
+                {DAY_TAG_LABEL[tag]}
               </button>
             );
           })}
@@ -206,13 +360,30 @@ export const TodayView: React.FC<TodayViewProps> = ({
           </button>
         </div>
 
+        {/* A failed save keeps every selection and the note as they were. */}
+        {checkin.saveStatus === 'error' && (
+          <div className="px-3 py-2 rounded-2xl bg-[#ffdad6]/40 border border-[#ffdad6] text-xs text-[#93000a]">
+            <p>Your check-in was not saved. {checkin.saveError?.message}</p>
+            {requestIdOf(checkin.saveError) && (
+              <p className="text-[10px] text-[#bda99f] font-mono break-all mt-0.5">
+                Request {requestIdOf(checkin.saveError)}
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Expandable note input */}
         {showNoteInput && (
           <div className="p-3 bg-[#faf2ec] rounded-2xl border border-[#eee7e1] space-y-2 animate-in fade-in duration-150">
             <textarea
               placeholder="How are you feeling right now? Anything mindful on your mind?"
               value={checkInNote}
-              onChange={(e) => setCheckInNote(e.target.value)}
+              onChange={(e) => {
+                touched.current = true;
+                setCheckInNote(e.target.value);
+              }}
+              // The contract's limit, so an over-long note is stopped here, not by a 400.
+              maxLength={1000}
               className="w-full bg-white rounded-xl p-2.5 text-xs text-[#1e1b17] border border-[#eee7e1] focus:outline-none"
               rows={2}
             />
@@ -223,11 +394,14 @@ export const TodayView: React.FC<TodayViewProps> = ({
               >
                 Cancel
               </button>
+              {/* The same save as the header button: the whole check-in, note included. */}
               <button
-                onClick={handleSaveNote}
-                className="px-4 py-1 rounded-full text-xs font-bold bg-[#9f4118] text-white"
+                type="button"
+                onClick={handleSaveCheckin}
+                disabled={!form || saving || !dirty}
+                className="px-4 py-1 rounded-full text-xs font-bold bg-[#9f4118] text-white disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                {noteSaved ? 'Saved! ✓' : 'Save Reflection'}
+                {saving ? 'Saving…' : !dirty ? 'Saved ✓' : 'Save Reflection'}
               </button>
             </div>
           </div>
@@ -240,35 +414,55 @@ export const TodayView: React.FC<TodayViewProps> = ({
           <span className="text-xs font-bold uppercase tracking-wider text-[#9f4118]">
             Plan vs. Actual Spotlight
           </span>
-          <span className="px-2 py-0.5 bg-[#adedd0] text-[#306d56] rounded-full text-[11px] font-bold">
-            Gentle Pivot
-          </span>
+          {spotlight && (
+            <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${TONE_CLASS[spotlight.tone]}`}>
+              {spotlight.label}
+            </span>
+          )}
         </div>
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-4 rounded-2xl bg-[#fff8f3] border border-[#ffdbce]/60">
-          <div className="flex-1">
-            <span className="text-[11px] font-bold text-[#8a726a] uppercase">Planned</span>
-            <p className="text-sm font-bold text-[#1e1b17] mt-0.5">Gym at 18:00</p>
-          </div>
-          <div className="w-8 h-8 rounded-full bg-[#ffdbce] text-[#7f2b01] flex items-center justify-center self-center flex-shrink-0">
-            <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
-          </div>
-          <div className="flex-1">
-            <span className="text-[11px] font-bold text-[#2b6952] uppercase">What actually happened</span>
-            <p className="text-sm font-bold text-[#1e1b17] mt-0.5">Walked for 40 minutes at 18:30</p>
-          </div>
-        </div>
+        {plan.plan.status === 'loading' && (
+          <p className="text-xs text-[#bda99f] font-medium">Comparing your plan with today…</p>
+        )}
 
-        {/* AURA Reflection */}
-        <div className="p-3.5 rounded-2xl bg-[#adedd0]/30 border border-[#adedd0] flex items-start gap-2.5">
-          <span className="text-base mt-0.5">💡</span>
-          <div>
-            <span className="text-xs font-bold text-[#0b513b]">AURA Reflection:</span>
-            <p className="text-xs text-[#0b513b] leading-relaxed mt-0.5">
-              “That still counts as movement. You changed the plan, but you didn't abandon the day.”
-            </p>
+        {plan.plan.status === 'error' && (
+          <p className="text-xs text-[#56423b]">
+            The comparison is unavailable until today's plan loads.
+          </p>
+        )}
+
+        {plan.plan.status === 'success' && !spotlight && (
+          <p className="text-xs text-[#56423b] leading-relaxed">
+            {comparison
+              ? 'Your plan has no items to compare yet.'
+              : 'No plan for today, so there is nothing to compare yet.'}
+          </p>
+        )}
+
+        {spotlight && (
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-4 rounded-2xl bg-[#fff8f3] border border-[#ffdbce]/60">
+            <div className="flex-1">
+              <span className="text-[11px] font-bold text-[#8a726a] uppercase">Planned</span>
+              <p className="text-sm font-bold text-[#1e1b17] mt-0.5">
+                {spotlight.planned.title} at {spotlight.planned.time}
+              </p>
+            </div>
+            <div className="w-8 h-8 rounded-full bg-[#ffdbce] text-[#7f2b01] flex items-center justify-center self-center flex-shrink-0">
+              <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+            </div>
+            <div className="flex-1">
+              <span className="text-[11px] font-bold text-[#2b6952] uppercase">What actually happened</span>
+              <p className="text-sm font-bold text-[#1e1b17] mt-0.5">
+                {spotlight.actual
+                  ? `${spotlight.actual.title} at ${spotlight.actual.time}`
+                  : 'Nothing logged for it yet'}
+              </p>
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* The prototype's "AURA Reflection" quote is not shown: no endpoint writes one
+            for a plan item, and a canned reflection would read as AURA having looked. */}
       </div>
 
       {/* Today's Story — the first card served by the API rather than by fixtures. */}
@@ -276,9 +470,9 @@ export const TodayView: React.FC<TodayViewProps> = ({
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl font-extrabold text-[#1e1b17]">Today's Story</h2>
-            {/* Said plainly: sleep, workouts and check-ins are not wired up yet, so an
-                absence here is not evidence that nothing else happened. */}
-            <p className="text-[11px] text-[#8a726a] mt-0.5">Meals so far today</p>
+            {/* Meals from `GET /api/meals/today`; every other event type from
+                `GET /api/events/today`, listed once under "Other moments". */}
+            <p className="text-[11px] text-[#8a726a] mt-0.5">Meals and moments so far today</p>
           </div>
           <button
             onClick={() => onOpenLogModal()}
@@ -323,7 +517,7 @@ export const TodayView: React.FC<TodayViewProps> = ({
           </div>
         )}
 
-        {today.status === 'success' && today.sections.length === 0 && (
+        {today.status === 'success' && sections.length === 0 && plan.events.status !== 'loading' && (
           <div className="bg-white rounded-3xl p-10 border border-[#eee7e1] shadow-xs text-center space-y-1">
             <p className="text-sm font-bold text-[#1e1b17]">Nothing logged yet today.</p>
             <p className="text-xs text-[#8a726a]">
@@ -333,8 +527,24 @@ export const TodayView: React.FC<TodayViewProps> = ({
           </div>
         )}
 
+        {today.status === 'success' && plan.events.status === 'error' && (
+          <div className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-2xl bg-white border border-[#ffdbce] text-xs text-[#56423b]">
+            <span>
+              Other moments could not be loaded.
+              {requestIdOf(plan.events.error) && (
+                <span className="text-[10px] text-[#bda99f] font-mono ml-1">
+                  Request {requestIdOf(plan.events.error)}
+                </span>
+              )}
+            </span>
+            <button type="button" onClick={plan.reload} className="font-bold text-[#9f4118] hover:underline">
+              Try again
+            </button>
+          </div>
+        )}
+
         {today.status === 'success' &&
-          today.sections.map((section) => (
+          sections.map((section) => (
           <div key={section.id} className="bg-white rounded-3xl p-6 border border-[#eee7e1] shadow-xs space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-[#eee7e1]/80">
               <div className="flex items-center gap-2">

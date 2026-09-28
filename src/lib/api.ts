@@ -2,7 +2,10 @@ import { getConfig } from './config';
 import type {
   AuraUser,
   CalculationResult,
+  Checkin,
+  CheckinInput,
   CreateMealInput,
+  DayEvent,
   ErrorDetail,
   ErrorEnvelope,
   Food,
@@ -10,6 +13,7 @@ import type {
   MealItemInput,
   MealType,
   ParsedMealResult,
+  PlanComparison,
   SessionResponse,
 } from './contract';
 import { getAccessToken } from './supabase';
@@ -102,8 +106,17 @@ export class NetworkError extends Error {
  * which is behaviour, not contract, and has no counterpart in an OpenAPI document.
  */
 export type {
+  Adherence,
   AuraUser,
   CalculatedItem,
+  Checkin,
+  CheckinInput,
+  DayEvent,
+  DayTag,
+  Mood,
+  EventType,
+  PlanComparison,
+  PlanComparisonItem,
   CalculationResult,
   ConfidenceBand,
   CreateMealInput,
@@ -124,7 +137,7 @@ export type {
   SizeLabel,
   UpdateMealInput,
 } from './contract';
-export { MEAL_UNITS, SIZE_LABELS } from './contract';
+export { DAY_TAGS, MEAL_UNITS, MOODS, SIZE_LABELS } from './contract';
 
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
@@ -228,6 +241,54 @@ export async function endSession(): Promise<void> {
  */
 export async function fetchTodayMeals(): Promise<Meal[]> {
   const { data } = await apiRequest<{ data: Meal[] }>('/meals/today');
+  return data;
+}
+
+// ── The day: events and the plan ───────────────────────────────────────────────
+
+/**
+ * Everything that happened today — meals, workouts, check-ins, water — as events.
+ * Like `fetchTodayMeals`, no `date`: the server answers "today" from the profile's
+ * timezone. One page is a whole day, so `nextCursor` is not followed here.
+ */
+export async function fetchTodayEvents(): Promise<DayEvent[]> {
+  const { data } = await apiRequest<{ data: DayEvent[] }>('/events/today');
+  return data;
+}
+
+/**
+ * Today's plan against what actually happened, or `null` when there is no plan.
+ *
+ * A day without a plan is an ordinary day, not a failure: the server answers it with
+ * `404 NOT_FOUND`, and that one answer is translated into `null` here so no caller has
+ * to know the convention. Every other failure still throws.
+ */
+export async function fetchPlanComparison(): Promise<PlanComparison | null> {
+  try {
+    return await apiRequest<PlanComparison>('/daily-plan/comparison');
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404 && error.code === 'NOT_FOUND') return null;
+    throw error;
+  }
+}
+
+// ── Check-ins ──────────────────────────────────────────────────────────────────
+
+/**
+ * Saves today's check-in. The server keeps one per local day and upserts it, so this is
+ * both "create" and "change my answer" — 201 the first time, 200 after. No `localDate`
+ * is sent: which day "today" is stays the server's answer, from the profile timezone.
+ *
+ * Send the whole form every time. A field left out is not "unchanged" to the server; it
+ * is cleared.
+ */
+export async function saveCheckin(input: CheckinInput): Promise<Checkin> {
+  return apiRequest<Checkin>('/checkins', { method: 'POST', body: input });
+}
+
+/** Recent check-ins — the server's default window, the last 30 days up to today. */
+export async function fetchRecentCheckins(): Promise<Checkin[]> {
+  const { data } = await apiRequest<{ data: Checkin[] }>('/checkins');
   return data;
 }
 

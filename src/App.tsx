@@ -12,16 +12,22 @@ import { AICoachView } from './components/AICoachView';
 import { LoginView } from './components/LoginView';
 import { useAuth } from './auth/AuthProvider';
 import { useTodayMeals } from './hooks/useTodayMeals';
+import { useTodayPlan } from './hooks/useTodayPlan';
 
 function SignedInApp() {
   const [currentTab, setCurrentTab] = useState<TabType>('today');
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [logModalInitialPrompt, setLogModalInitialPrompt] = useState<string | undefined>(undefined);
   const [selectedMood, setSelectedMood] = useState<string>('good');
-  const [streakCount, setStreakCount] = useState<number>(5);
-  // Today's Story is served by GET /api/meals/today. The other views below are still
-  // prototype fixtures; replacing them is a later task.
+  // The streak is the server's count on the profile (`GET /api/users/me`), not a
+  // number kept here. It refreshes with the profile, not with each meal.
+  const { user } = useAuth();
+  const streakCount = user?.streakDays ?? 0;
+  // Today is served by the API: meals, the plan comparison and the day's other
+  // events. Insights, History, Crew and the coach are still prototype fixtures;
+  // replacing them is a later slice.
   const today = useTodayMeals();
+  const plan = useTodayPlan();
   const [crew, setCrew] = useState<CrewMember[]>(INITIAL_CREW);
   const [feed, setFeed] = useState<HighFiveFeedItem[]>(INITIAL_FEED);
 
@@ -45,6 +51,9 @@ function SignedInApp() {
    */
   const handleMealSaved = () => {
     today.reload();
+    // A confirmed meal is a new event, and it may satisfy a planned meal: the server
+    // re-reconciles the plan, so both reads are stale now.
+    plan.reload();
   };
 
   // Crew reactions
@@ -116,6 +125,7 @@ function SignedInApp() {
         {currentTab === 'today' && (
           <TodayView
             today={today}
+            plan={plan}
             onOpenLogModal={handleOpenLogModal}
             onSelectMood={setSelectedMood}
             selectedMood={selectedMood}
