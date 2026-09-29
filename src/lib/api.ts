@@ -1,6 +1,7 @@
 import { getConfig } from './config';
 import type {
   AgentChatResponse,
+  AnalyzeImageResult,
   AuraUser,
   CalculationResult,
   Checkin,
@@ -113,6 +114,7 @@ export type {
   Adherence,
   AgentChatInput,
   AgentChatResponse,
+  AnalyzeImageResult,
   AgentIntent,
   AgentReplyKind,
   AgentSection,
@@ -160,6 +162,7 @@ export { DAY_TAGS, MEAL_UNITS, MOODS, SIZE_LABELS } from './contract';
 
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
+  /** JSON by default. A `FormData` is sent as multipart — see `apiRequest`. */
   body?: unknown;
   /** The bootstrap call sends its token in the body and needs no header. */
   authenticated?: boolean;
@@ -169,8 +172,18 @@ export interface RequestOptions {
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, authenticated = true, signal } = options;
 
+  /**
+   * The one endpoint that takes a file sends `multipart/form-data`.
+   *
+   * `Content-Type` must then be left off entirely: the browser sets it *and* the
+   * boundary token it generated, and a hand-written header overwrites the boundary
+   * with nothing, which the server reads as a malformed body — a 415 that looks like
+   * a rejected image rather than a broken request.
+   */
+  const isMultipart = typeof FormData !== 'undefined' && body instanceof FormData;
+
   const headers: Record<string, string> = { 'X-AURA-Version': '1' };
-  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  if (body !== undefined && !isMultipart) headers['Content-Type'] = 'application/json';
 
   if (authenticated) {
     const token = await getAccessToken();
@@ -193,7 +206,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     response = await fetch(`${getConfig().apiBaseUrl}${path}`, {
       method,
       headers,
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      ...(body === undefined ? {} : { body: isMultipart ? (body as FormData) : JSON.stringify(body) }),
       ...(signal ? { signal } : {}),
     });
   } catch (cause) {
@@ -439,6 +452,41 @@ export async function parseMeal(text: string, mealType: MealType): Promise<Parse
   return apiRequest<ParsedMealResult>('/meals/parse', {
     method: 'POST',
     body: { text, mealType },
+  });
+}
+
+/**
+ * A photo to a reviewable **draft**, by the same route a description takes.
+ *
+ * The response is the same shape `parseMeal` returns and the draft is already stored,
+ * so everything downstream — correcting amounts, `updateMeal`, `confirmMeal` — is
+ * shared with Describe rather than duplicated for photos.
+ *
+ * The image is sent to **AURA**, which calls the vision provider server-side. No
+ * provider key exists in this bundle and no image is ever sent anywhere else. The
+ * server checks the file by its bytes rather than its declared type, re-encodes it,
+ * and strips all metadata including GPS before analysis; it is never stored.
+ *
+ * Rate limited to the `ai-vision` bucket — 20 a day — which is why `imageProblem()`
+ * screens a file that is certainly going to be refused before one is spent on it.
+ */
+export async function analyzeMealImage(
+  image: File,
+  options: { mealType?: MealType; description?: string; signal?: AbortSignal } = {},
+): Promise<AnalyzeImageResult> {
+  const form = new FormData();
+  form.append('image', image);
+  if (options.mealType) form.append('mealType', options.mealType);
+
+  // An empty box means "no hint", and the server deletes an empty string before
+  // validating. Not sending it at all says the same thing with less to go wrong.
+  const description = options.description?.trim();
+  if (description) form.append('description', description);
+
+  return apiRequest<AnalyzeImageResult>('/meals/analyze-image', {
+    method: 'POST',
+    body: form,
+    ...(options.signal ? { signal: options.signal } : {}),
   });
 }
 

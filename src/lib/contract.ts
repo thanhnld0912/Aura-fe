@@ -93,6 +93,20 @@ export type CreateMealInput = Body<'/api/meals', 'post'>;
 export type UpdateMealInput = Body<'/api/meals/{id}', 'patch'>;
 export type ParsedMealResult = Response<'/api/meals/parse', 'post', 200>;
 
+/**
+ * `POST /api/meals/analyze-image`: a photo in, the same reviewable draft out.
+ *
+ * Projected from its own path rather than aliased to `ParsedMealResult`, even though
+ * the two 200 schemas are byte-identical today. They are separate operations on the
+ * backend and may diverge; deriving each from its own path means a divergence lands
+ * here as a compile error instead of as a silently wrong render.
+ *
+ * The draft is already persisted when this returns — it has an `id` and `status:
+ * 'draft'` — so the flow past this point is Describe's exactly: correct the amounts,
+ * `PATCH` if they changed, then `confirm`.
+ */
+export type AnalyzeImageResult = Response<'/api/meals/analyze-image', 'post', 200>;
+
 // ── Nutrition ──────────────────────────────────────────────────────────────────
 
 export type Food = Response<'/api/nutrition/search', 'get', 200>['data'][number];

@@ -1,5 +1,6 @@
 import React from 'react';
 import type { Nutrients } from '../../lib/api';
+import { ConfidenceBadge, SourceAttribution } from './ConfidenceBadge';
 import type { ReviewItem, ReviewModel } from './types';
 
 /**
@@ -27,13 +28,6 @@ interface MealReviewProps {
   onSave: () => void;
   saveLabel: string;
 }
-
-const BAND_STYLE: Record<ReviewItem['confidenceBand'], { className: string; label: string }> = {
-  confident: { className: 'bg-[#adedd0] text-[#306d56]', label: 'Confident' },
-  estimate: { className: 'bg-[#e8e1db] text-[#56423b]', label: 'Estimate' },
-  uncertain: { className: 'bg-[#ffdbce] text-[#7f2b01]', label: 'Uncertain' },
-  unresolved: { className: 'bg-[#ffdad6] text-[#93000a]', label: 'Not found' },
-};
 
 /** The server's value, verbatim. `null` is a fact, not a zero. */
 const show = (value: number | null | undefined, suffix = ''): string =>
@@ -107,7 +101,6 @@ export const MealReview: React.FC<MealReviewProps> = ({
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {review.items.map((item) => {
-          const band = BAND_STYLE[item.confidenceBand];
           return (
             <div
               key={item.key}
@@ -117,11 +110,7 @@ export const MealReview: React.FC<MealReviewProps> = ({
                 <h3 className="text-base font-bold text-[#1e1b17] min-w-0 break-words">
                   {item.name}
                 </h3>
-                <span
-                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold flex-shrink-0 ${band.className}`}
-                >
-                  {band.label}
-                </span>
+                <ConfidenceBadge band={item.confidenceBand} confidence={item.confidence} />
               </div>
 
               <div className="text-xs text-[#56423b]">
@@ -148,10 +137,7 @@ export const MealReview: React.FC<MealReviewProps> = ({
                 <MacroRow label="Fibre" value={item.nutrition.fiberG} />
               </div>
 
-              <div className="text-[10px] text-[#bda99f] leading-relaxed">
-                source: {item.source} · confidence {item.confidence}
-                {item.trace && <span className="block break-words">{item.trace}</span>}
-              </div>
+              <SourceAttribution source={item.source} trace={item.trace} />
             </div>
           );
         })}

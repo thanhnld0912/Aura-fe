@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useReducer, useRef } from 'reac
 import {
   ApiError,
   NetworkError,
+  analyzeMealImage,
   calculateNutrition,
   confirmMeal,
   createMeal,
@@ -11,6 +12,7 @@ import {
   type Food,
   type MealType,
 } from '../../lib/api';
+import { formatWait } from '../../lib/insights';
 import type { ActivityCategory } from '../../types';
 import { DescribeMode } from './DescribeMode';
 import { MealReview } from './MealReview';
@@ -69,9 +71,20 @@ const CATEGORIES: ReadonlyArray<{ key: ActivityCategory; label: string; icon: st
 
 const SEARCH_DEBOUNCE_MS = 300;
 
+/**
+ * The server's own wording wherever it is written for a person — which, for the photo
+ * failures (413, 415), it is: "The image is larger than the upload limit" needs no
+ * help. Only the rate limit is rewritten, because "try again later" is not useful
+ * advice when the photo bucket is twenty a day and the server said exactly how long.
+ */
 function describeFailure(error: RequestError): string {
   if (error instanceof NetworkError) return error.message;
-  if (error.status === 429) return 'Too many requests. Please try again later.';
+  if (error.status === 429) {
+    const wait = formatWait(error.retryAfterSeconds);
+    return wait
+      ? `Too many requests. You can try again in about ${wait}.`
+      : 'Too many requests. Please try again later.';
+  }
   return error.message;
 }
 
@@ -196,6 +209,33 @@ const LogModalContent: React.FC<LogModalProps> = ({ onClose, onSaved, initialPro
       fail(error, 'parsing');
     }
   }, [state.text, state.mealType, fail, claim, superseded]);
+
+  // ── Photo: analyse ──────────────────────────────────────────────────────────
+
+  /**
+   * Same lifecycle as a parse, and deliberately the same reducer actions: the
+   * endpoint returns the same persisted draft, so everything downstream — correcting
+   * amounts, PATCH, confirm — is Describe's code path rather than a second copy of it.
+   */
+  const handleAnalyze = useCallback(async () => {
+    if (!state.photoFile) return;
+
+    const seq = claim();
+    dispatch({ type: 'parseStart' });
+    try {
+      const { meal, ambiguous } = await analyzeMealImage(state.photoFile, {
+        mealType: state.mealType,
+        description: state.photoNote,
+      });
+      if (superseded(seq)) return;
+      dispatch({ type: 'parseOk', meal, ambiguous });
+    } catch (error) {
+      // The chosen photo and the hint both stay, so a failure costs a second press
+      // rather than picking the picture again.
+      if (superseded(seq)) return;
+      fail(error, 'parsing');
+    }
+  }, [state.photoFile, state.mealType, state.photoNote, fail, claim, superseded]);
 
   // ── Saving ──────────────────────────────────────────────────────────────────
   const handleSave = useCallback(async () => {
@@ -332,7 +372,7 @@ const LogModalContent: React.FC<LogModalProps> = ({ onClose, onSaved, initialPro
               </div>
               <div className="min-w-0">
                 <div className="text-sm font-bold text-[#1e1b17]">Take a photo</div>
-                <p className="text-xs text-[#56423b] truncate">Coming soon</p>
+                <p className="text-xs text-[#56423b] truncate">AURA reads the plate</p>
               </div>
             </button>
 
@@ -378,7 +418,17 @@ const LogModalContent: React.FC<LogModalProps> = ({ onClose, onSaved, initialPro
 
           {/* Mode body */}
           <div className="mb-6">
-            {state.mode === 'photo' && <PhotoMode />}
+            {state.mode === 'photo' && (
+              <PhotoMode
+                file={state.photoFile}
+                note={state.photoNote}
+                busy={busy}
+                analyzed={state.draftMealId !== null}
+                onPick={(file) => dispatch({ type: 'setPhoto', file })}
+                onNoteChange={(note) => dispatch({ type: 'setPhotoNote', note })}
+                onAnalyze={() => void handleAnalyze()}
+              />
+            )}
 
             {state.mode === 'describe' && (
               <DescribeMode

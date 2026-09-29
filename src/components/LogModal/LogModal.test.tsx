@@ -133,6 +133,60 @@ async function searchFor(term: string): Promise<void> {
   });
 }
 
+/**
+ * `POST /api/meals/analyze-image` returns the same shape `/meals/parse` does — a
+ * persisted draft — so photo mode reviews and confirms through Describe's path.
+ */
+const analyzed = (overrides: Record<string, unknown> = {}) => ({
+  meal: savedMeal({
+    id: 'meal-photo-1',
+    status: 'draft',
+    eventId: null,
+    rawInput: null,
+    items: [
+      {
+        id: 'item-photo-1',
+        foodId: RICE.foodId,
+        detectedName: 'rice',
+        displayNameVi: 'Cơm trắng',
+        displayNameEn: 'Steamed white rice',
+        quantity: 1,
+        unit: 'bowl',
+        gramsResolved: 150,
+        portionLabel: 'medium',
+        nutrition: { kcal: 195, proteinG: 4.05, carbsG: 42.3, fatG: 0.45, fiberG: 0.6 },
+        source: 'vision',
+        confidence: 0.72,
+        confidenceBand: 'estimate',
+        userConfirmed: false,
+      },
+    ],
+    confidence: 0.72,
+    confidenceBand: 'estimate',
+    ...overrides,
+  }),
+  ambiguous: [],
+  parser: 'gemini-vision-v1',
+});
+
+const jpeg = (name = 'lunch.jpg', bytes = 2048): File =>
+  new File([new Uint8Array(bytes)], name, { type: 'image/jpeg' });
+
+const fileInput = (): HTMLInputElement =>
+  document.querySelector('input[type="file"]') as HTMLInputElement;
+
+/** Opens the composer, switches to photo mode and chooses a valid JPEG. */
+async function choosePhoto(file: File = jpeg()): Promise<void> {
+  open();
+  await userEvent.click(screen.getByRole('button', { name: /Take a photo/ }));
+  await userEvent.upload(fileInput(), file);
+}
+
+async function analyzePhoto(file: File = jpeg()): Promise<void> {
+  await choosePhoto(file);
+  await userEvent.click(screen.getByRole('button', { name: /Read the photo/ }));
+}
+
 async function pickRice(): Promise<void> {
   await userEvent.click(screen.getByRole('button', { name: /Quick add/ }));
   fetchMock.mockImplementation(async (url: string) => {
@@ -523,7 +577,11 @@ describe('Describe', () => {
     );
     await parse();
 
-    expect(await screen.findByText('Too many requests. Please try again later.')).toBeInTheDocument();
+    // The server sent Retry-After: 881, so the wait is quoted rather than left as
+    // "later" — the photo bucket is twenty a day and "later" is not advice.
+    expect(
+      await screen.findByText('Too many requests. You can try again in about 15 min.'),
+    ).toBeInTheDocument();
     expect(callsTo('/meals/parse')).toHaveLength(1);
 
     await new Promise((resolve) => setTimeout(resolve, 60));
@@ -585,13 +643,14 @@ describe('safety and regressions', () => {
     expect(onSaved).not.toHaveBeenCalled();
   });
 
-  it('offers no way to submit a photo', async () => {
-    open();
-    await userEvent.click(screen.getByRole('button', { name: /Take a photo/ }));
+  it('sends a photo only to AURA, never to a model provider', async () => {
+    fetchMock.mockImplementation(async () => json(200, analyzed()));
+    await analyzePhoto();
 
-    expect(await screen.findByText(/Photo logging is coming soon/)).toBeInTheDocument();
-    expect(document.querySelector('input[type="file"]')).toBeNull();
-    expect(screen.queryByRole('button', { name: /Looks right/ })).not.toBeInTheDocument();
+    // Every request this flow makes goes to the AURA API. No provider host, no key.
+    for (const [url] of fetchMock.mock.calls) {
+      expect(String(url)).toContain('localhost:3001/api');
+    }
   });
 
   it('disables every category that has no backend behind it', async () => {
@@ -621,5 +680,344 @@ describe('safety and regressions', () => {
     rerender(<LogModal isOpen onClose={onClose} onSaved={onSaved} />);
 
     expect(await screen.findByText('What happened?')).toBeInTheDocument();
+  });
+});
+
+describe('Photo', () => {
+  it('starts with a picker and no way to analyse nothing', async () => {
+    open();
+    await userEvent.click(screen.getByRole('button', { name: /Take a photo/ }));
+
+    expect(screen.getByRole('button', { name: /Take or choose a photo/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Read the photo/ })).toBeDisabled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('accepts only the three types the endpoint documents', async () => {
+    open();
+    await userEvent.click(screen.getByRole('button', { name: /Take a photo/ }));
+
+    expect(fileInput()).toHaveAttribute('accept', 'image/jpeg,image/png,image/webp');
+  });
+
+  it('previews the chosen photo and enables the analyse button', async () => {
+    await choosePhoto(jpeg('pho.jpg'));
+
+    expect(screen.getByAltText(/meal you are about to log/i)).toBeInTheDocument();
+    expect(screen.getByText(/pho\.jpg/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Read the photo/ })).toBeEnabled();
+  });
+
+  it('refuses a non-image before spending one of the twenty daily calls', async () => {
+    open();
+    await userEvent.click(screen.getByRole('button', { name: /Take a photo/ }));
+    // `accept` is a picker hint, not enforcement — drag-and-drop and some platforms
+    // hand over anything. `applyAccept: false` reaches the guard that catches that.
+    await userEvent.upload(
+      fileInput(),
+      new File(['%PDF-1.4'], 'menu.pdf', { type: 'application/pdf' }),
+      { applyAccept: false },
+    );
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'That file is not a JPEG, PNG or WebP image.',
+    );
+    expect(screen.getByRole('button', { name: /Read the photo/ })).toBeDisabled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses a file over the upload limit, saying how big it was', async () => {
+    open();
+    await userEvent.click(screen.getByRole('button', { name: /Take a photo/ }));
+    await userEvent.upload(fileInput(), jpeg('huge.jpg', 9 * 1024 * 1024), {
+      applyAccept: false,
+    });
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('9.0 MB');
+    expect(alert).toHaveTextContent('limit is 8.0 MB');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('posts multipart/form-data with the image, meal type and hint', async () => {
+    fetchMock.mockImplementation(async () => json(200, analyzed()));
+    await choosePhoto(jpeg('lunch.jpg'));
+    await userEvent.type(screen.getByLabelText(/Anything AURA should know/), 'pho bo tai');
+    await userEvent.click(screen.getByRole('button', { name: /Read the photo/ }));
+
+    await waitFor(() => expect(callsTo('/meals/analyze-image')).toHaveLength(1));
+    const [url, init] = callsTo('/meals/analyze-image')[0];
+
+    expect(url).toBe('http://localhost:3001/api/meals/analyze-image');
+    expect(init.method).toBe('POST');
+
+    const body = init.body as FormData;
+    expect(body).toBeInstanceOf(FormData);
+    expect((body.get('image') as File).name).toBe('lunch.jpg');
+    expect(body.get('mealType')).toBe('lunch');
+    expect(body.get('description')).toBe('pho bo tai');
+
+    // The browser must set Content-Type itself so the multipart boundary survives.
+    expect((init.headers as Record<string, string>)['Content-Type']).toBeUndefined();
+    expect((init.headers as Record<string, string>)['Authorization']).toBe('Bearer a.supabase.jwt');
+  });
+
+  it('omits the hint entirely when the box is empty', async () => {
+    fetchMock.mockImplementation(async () => json(200, analyzed()));
+    await analyzePhoto();
+
+    await waitFor(() => expect(callsTo('/meals/analyze-image')).toHaveLength(1));
+    expect((callsTo('/meals/analyze-image')[0][1].body as FormData).get('description')).toBeNull();
+  });
+
+  it('reviews the draft the server returned, with its figures', async () => {
+    fetchMock.mockImplementation(async () => json(200, analyzed()));
+    await analyzePhoto();
+
+    // Named on the review card and again on the editable amount row below it.
+    expect(await screen.findAllByText('Cơm trắng')).not.toHaveLength(0);
+    // The item card and the totals panel both carry the figure.
+    expect(await screen.findAllByText(/195 kcal/)).not.toHaveLength(0);
+    expect(screen.getByRole('button', { name: /Looks right/ })).toBeInTheDocument();
+  });
+
+  it('shows no figure at all before the server has answered', async () => {
+    let release: ((value: Response) => void) | undefined;
+    fetchMock.mockImplementation(() => new Promise<Response>((resolve) => (release = resolve)));
+    await analyzePhoto();
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Read the photo/ })).toBeDisabled(),
+    );
+    expect(screen.queryByText(/kcal/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Looks right/ })).not.toBeInTheDocument();
+
+    release?.(json(200, analyzed()));
+    expect(await screen.findAllByText(/195 kcal/)).not.toHaveLength(0);
+  });
+
+  it('keeps the photo and the hint when the analysis fails', async () => {
+    fetchMock.mockImplementation(async () =>
+      json(
+        415,
+        errorBody('UNSUPPORTED_MEDIA_TYPE', 'The file content is not a JPEG, PNG or WebP image'),
+      ),
+    );
+    await choosePhoto(jpeg('lunch.jpg'));
+    await userEvent.type(screen.getByLabelText(/Anything AURA should know/), 'bun cha');
+    await userEvent.click(screen.getByRole('button', { name: /Read the photo/ }));
+
+    expect(
+      await screen.findByText('The file content is not a JPEG, PNG or WebP image'),
+    ).toBeInTheDocument();
+    // Nothing to redo: the picture and the hint are both still there.
+    expect(screen.getByText(/lunch\.jpg/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Anything AURA should know/)).toHaveValue('bun cha');
+  });
+
+  it('reports a photo over the server-side dimension limit', async () => {
+    fetchMock.mockImplementation(async () =>
+      json(413, errorBody('PAYLOAD_TOO_LARGE', 'The image dimensions are larger than supported')),
+    );
+    await analyzePhoto();
+
+    expect(
+      await screen.findByText('The image dimensions are larger than supported'),
+    ).toBeInTheDocument();
+  });
+
+  it('lets a failed analysis be retried without re-picking the photo', async () => {
+    fetchMock.mockImplementation(async () =>
+      json(500, errorBody('INTERNAL_ERROR', 'Something broke')),
+    );
+    await analyzePhoto();
+    await screen.findByText('Something broke');
+
+    fetchMock.mockImplementation(async () => json(200, analyzed()));
+    await userEvent.click(screen.getByRole('button', { name: /Back to editing/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Read the photo/ }));
+
+    expect(await screen.findAllByText(/195 kcal/)).not.toHaveLength(0);
+    expect(callsTo('/meals/analyze-image')).toHaveLength(2);
+  });
+
+  it('cannot be pressed a second time while a reading is open', async () => {
+    let release: ((value: Response) => void) | undefined;
+    fetchMock.mockImplementation(() => new Promise<Response>((resolve) => (release = resolve)));
+    await analyzePhoto();
+
+    const button = screen.getByRole('button', { name: /Read the photo/ });
+    await waitFor(() => expect(button).toBeDisabled());
+
+    // The impatient second press, while the first call is still open.
+    await userEvent.click(button);
+    expect(callsTo('/meals/analyze-image')).toHaveLength(1);
+
+    release?.(json(200, analyzed()));
+    await screen.findAllByText(/195 kcal/);
+    expect(callsTo('/meals/analyze-image')).toHaveLength(1);
+  });
+
+  it('never turns two readings into two meals', async () => {
+    // Two drafts can exist — the second reading supersedes the first — but only the
+    // draft on screen is ever confirmed, so only one meal is created.
+    let parses = 0;
+    fetchMock.mockImplementation(async (url: string) => {
+      if (String(url).includes('/analyze-image')) {
+        parses += 1;
+        return json(200, analyzed({ id: `meal-photo-${parses}` }));
+      }
+      return json(200, savedMeal({ id: 'meal-photo-2', status: 'confirmed' }));
+    });
+
+    await analyzePhoto();
+    await screen.findAllByText(/195 kcal/);
+    await userEvent.click(screen.getByRole('button', { name: /Read the photo again/ }));
+    await waitFor(() => expect(callsTo('/analyze-image')).toHaveLength(2));
+
+    await userEvent.click(screen.getByRole('button', { name: /Looks right/ }));
+
+    await waitFor(() => expect(callsTo('/meals/meal-photo-2/confirm')).toHaveLength(1));
+    expect(callsTo('/meals/meal-photo-1/confirm')).toHaveLength(0);
+    expect(onSaved).toHaveBeenCalledTimes(1);
+  });
+
+  it('confirms the draft the photo produced, creating the timeline event', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (String(url).includes('/analyze-image')) return json(200, analyzed());
+      return json(200, savedMeal({ id: 'meal-photo-1', status: 'confirmed' }));
+    });
+    await analyzePhoto();
+    await userEvent.click(await screen.findByRole('button', { name: /Looks right/ }));
+
+    await waitFor(() => expect(callsTo('/meals/meal-photo-1/confirm')).toHaveLength(1));
+    // Untouched amounts are confirmed as they are — no PATCH claiming an edit.
+    expect(
+      callsTo('/meals/meal-photo-1').filter(([, init]) => init.method === 'PATCH'),
+    ).toHaveLength(0);
+    expect(onSaved).toHaveBeenCalledWith('meal-photo-1');
+  });
+
+  it('discards the previous draft when a different photo is chosen', async () => {
+    fetchMock.mockImplementation(async () => json(200, analyzed()));
+    await analyzePhoto();
+    await screen.findAllByText(/195 kcal/);
+
+    await userEvent.upload(fileInput(), jpeg('dinner.jpg'));
+
+    // The review described the old picture; leaving it would let it be confirmed
+    // as though it described the new one.
+    expect(screen.queryAllByText(/195 kcal/)).toHaveLength(0);
+    expect(screen.queryByRole('button', { name: /Looks right/ })).not.toBeInTheDocument();
+    expect(screen.getByText(/dinner\.jpg/)).toBeInTheDocument();
+  });
+
+  it('clears the photo when the mode changes', async () => {
+    await choosePhoto(jpeg('lunch.jpg'));
+    await userEvent.click(screen.getByRole('button', { name: /Quick add/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Take a photo/ }));
+
+    expect(screen.queryByText(/lunch\.jpg/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Read the photo/ })).toBeDisabled();
+  });
+
+  it('sends one analysis under StrictMode, not two', async () => {
+    fetchMock.mockImplementation(async () => json(200, analyzed()));
+    render(
+      <React.StrictMode>
+        <LogModal isOpen onClose={onClose} onSaved={onSaved} />
+      </React.StrictMode>,
+    );
+    await userEvent.click(screen.getByRole('button', { name: /Take a photo/ }));
+    await userEvent.upload(fileInput(), jpeg());
+    await userEvent.click(screen.getByRole('button', { name: /Read the photo/ }));
+
+    await waitFor(() => expect(callsTo('/meals/analyze-image')).toHaveLength(1));
+  });
+});
+
+describe('ConfidenceBadge', () => {
+  const withBand = (band: string, confidence: number | null) => {
+    const base = analyzed();
+    return {
+      ...base,
+      meal: {
+        ...base.meal,
+        items: [
+          {
+            ...base.meal.items[0],
+            source: 'vision',
+            confidence: confidence ?? 0,
+            confidenceBand: band,
+          },
+        ],
+        confidence,
+        confidenceBand: band,
+      },
+    };
+  };
+
+  it('renders the band the server sent, not one derived from the number', async () => {
+    // 0.95 would be "confident" by the documented thresholds; the server said
+    // "estimate", and NUTRITION_ARCHITECTURE.md §6 says the band is the API's to
+    // decide, so the band is what gets shown.
+    fetchMock.mockImplementation(async () => json(200, withBand('estimate', 0.95)));
+    await analyzePhoto();
+
+    expect(await screen.findByTitle('Estimate — 95% confidence')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['confident', 0.9, 'Confident', '90%'],
+    ['estimate', 0.72, 'Estimate', '72%'],
+    ['uncertain', 0.41, 'Uncertain', '41%'],
+  ])('shows the %s band with its percentage', async (band, confidence, label, percent) => {
+    fetchMock.mockImplementation(async () => json(200, withBand(band, confidence as number)));
+    await analyzePhoto();
+
+    const badge = await screen.findByTitle(`${label} — ${percent} confidence`);
+    expect(badge).toHaveTextContent(label);
+    expect(badge).toHaveTextContent(percent);
+  });
+
+  it('shows no percentage at all for an unresolved item', async () => {
+    fetchMock.mockImplementation(async () => json(200, withBand('unresolved', null)));
+    await analyzePhoto();
+
+    const badge = await screen.findByTitle('Not found');
+    expect(badge).toHaveTextContent('Not found');
+    expect(badge.textContent).not.toMatch(/%/);
+  });
+
+  it('names the provenance instead of printing the raw source key', async () => {
+    fetchMock.mockImplementation(async () => json(200, analyzed()));
+    await analyzePhoto();
+
+    expect(await screen.findByText('Estimated from your photo')).toBeInTheDocument();
+    expect(screen.queryByText(/source: vision/)).not.toBeInTheDocument();
+    // The numeric confidence is no longer dumped as raw text beside it.
+    expect(screen.queryByText(/confidence 0\.72/)).not.toBeInTheDocument();
+  });
+
+  it('shows an unknown source verbatim rather than hiding or guessing it', async () => {
+    const base = analyzed();
+    fetchMock.mockImplementation(async () =>
+      json(200, {
+        ...base,
+        meal: { ...base.meal, items: [{ ...base.meal.items[0], source: 'nutritionix' }] },
+      }),
+    );
+    await analyzePhoto();
+
+    expect(await screen.findByText('nutritionix')).toBeInTheDocument();
+  });
+
+  it('keeps the calculate flow trace alongside the provenance', async () => {
+    open();
+    await pickRice();
+    await userEvent.click(screen.getByRole('button', { name: /Work out the nutrition/ }));
+
+    expect(await screen.findByText('AURA food database')).toBeInTheDocument();
+    expect(screen.getByText('portion row "1 bowl" → 150 g')).toBeInTheDocument();
   });
 });

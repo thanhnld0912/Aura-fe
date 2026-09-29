@@ -43,6 +43,16 @@ export interface LogState {
   /** Describe mode: kept verbatim through a failure so nothing is retyped. */
   text: string;
 
+  /**
+   * Photo mode: the chosen file, and the optional hint sent alongside it.
+   *
+   * The `File` itself is state because the request needs it again on a retry — a
+   * failed analysis must not make anyone pick the photo a second time. No preview URL
+   * lives here: that is an object URL with a lifetime, and `PhotoMode` owns it.
+   */
+  photoFile: File | null;
+  photoNote: string;
+
   /** Quick Add. */
   query: string;
   results: Food[];
@@ -76,6 +86,8 @@ export const initialState = (initialText = ''): LogState => ({
   mode: 'describe',
   mealType: 'lunch',
   text: initialText,
+  photoFile: null,
+  photoNote: '',
   query: '',
   results: [],
   drafts: [],
@@ -92,6 +104,8 @@ export type Action =
   | { type: 'setMode'; mode: LogMode }
   | { type: 'setMealType'; mealType: MealType }
   | { type: 'setText'; text: string }
+  | { type: 'setPhoto'; file: File | null }
+  | { type: 'setPhotoNote'; note: string }
   | { type: 'parseStart' }
   | { type: 'parseOk'; meal: Meal; ambiguous: string[] }
   | { type: 'setQuery'; query: string }
@@ -127,6 +141,26 @@ export function reducer(state: LogState, action: Action): LogState {
 
     case 'setText':
       return { ...state, text: action.text, phase: 'editing', error: null, errorFrom: null };
+
+    case 'setPhoto':
+      // Choosing a different photo abandons whatever the last one produced: the draft
+      // on screen describes the old picture, and leaving it there would let it be
+      // confirmed as if it described the new one.
+      return {
+        ...state,
+        photoFile: action.file,
+        phase: 'editing',
+        review: null,
+        draftMealId: null,
+        drafts: [],
+        draftsDirty: false,
+        reviewStale: false,
+        error: null,
+        errorFrom: null,
+      };
+
+    case 'setPhotoNote':
+      return { ...state, photoNote: action.note, error: null, errorFrom: null };
 
     case 'parseStart':
       return { ...state, phase: 'parsing', error: null, errorFrom: null };
