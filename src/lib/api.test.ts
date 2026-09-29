@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, NetworkError, apiRequest, exchangeSession } from './api';
+import { ApiError, NetworkError, apiRequest, exchangeSession, fetchEvents, type EventPage } from './api';
 
 /**
  * What the API client must get right: the token is attached automatically, it comes
@@ -118,5 +118,45 @@ describe('exchangeSession', () => {
     expect((init.headers as Record<string, string>)['Authorization']).toBeUndefined();
     // The bootstrap must not depend on already having a session.
     expect(getAccessToken).not.toHaveBeenCalled();
+  });
+});
+
+describe('fetchEvents', () => {
+  const page: EventPage = { data: [], nextCursor: 'MjAyNi0wOS0yOFQxNTo0NToz+/=' };
+
+  it('asks for the first page with no parameters, authenticated, and returns the page as sent', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, page));
+
+    await expect(fetchEvents()).resolves.toEqual(page);
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('http://localhost:3001/api/events');
+    expect(init.method).toBe('GET');
+    expect((init.headers as Record<string, string>)['Authorization']).toBe('Bearer a.supabase.jwt');
+  });
+
+  it('sends the cursor back exactly as received, and nothing else', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, { data: [], nextCursor: null }));
+
+    await fetchEvents({ cursor: page.nextCursor! });
+
+    const url = new URL(fetchMock.mock.calls[0]![0] as string);
+    expect(url.pathname).toBe('/api/events');
+    expect([...url.searchParams.keys()]).toEqual(['cursor']);
+    expect(url.searchParams.get('cursor')).toBe(page.nextCursor);
+  });
+
+  it('surfaces a server failure and a 401 once each, without retrying', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(500, { error: { code: 'INTERNAL_ERROR', message: 'Boom', requestId: '01E' } }),
+    );
+    await expect(fetchEvents()).rejects.toMatchObject({ status: 500, requestId: '01E' });
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(401, { error: { code: 'UNAUTHENTICATED', message: 'Authentication required', requestId: '01F' } }),
+    );
+    await expect(fetchEvents({ cursor: 'abc' })).rejects.toMatchObject({ status: 401, isUnauthenticated: true });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

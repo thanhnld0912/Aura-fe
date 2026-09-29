@@ -121,6 +121,13 @@ export type DayEvent = Response<'/api/events/today', 'get', 200>['data'][number]
 export type EventType = DayEvent['type'];
 
 /**
+ * One page of history, as `GET /api/events` returns it: newest first, and a `nextCursor`
+ * that is `null` on the last page. The cursor is opaque — sent back verbatim, never read.
+ */
+export type EventPage = Response<'/api/events', 'get', 200>;
+export type HistoryEvent = EventPage['data'][number];
+
+/**
  * Plan vs actual for one day. Every judgement in it — which event satisfied which plan
  * item, whether it was on time, the adherence percentage — is the backend's
  * reconciliation (`daily-plans/reconciliation.ts`); the frontend only renders it.

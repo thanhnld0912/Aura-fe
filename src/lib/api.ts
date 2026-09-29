@@ -8,6 +8,7 @@ import type {
   DayEvent,
   ErrorDetail,
   ErrorEnvelope,
+  EventPage,
   Food,
   Meal,
   MealItemInput,
@@ -114,7 +115,9 @@ export type {
   DayEvent,
   DayTag,
   Mood,
+  EventPage,
   EventType,
+  HistoryEvent,
   PlanComparison,
   PlanComparisonItem,
   CalculationResult,
@@ -254,6 +257,21 @@ export async function fetchTodayMeals(): Promise<Meal[]> {
 export async function fetchTodayEvents(): Promise<DayEvent[]> {
   const { data } = await apiRequest<{ data: DayEvent[] }>('/events/today');
   return data;
+}
+
+/**
+ * One page of history, newest first.
+ *
+ * The first page is asked for with no parameters, so the server's default page size
+ * applies. Every later page passes back the `nextCursor` of the page before it, exactly
+ * as received: the cursor is the server's bookmark, not something to decode, build or
+ * adjust. `nextCursor: null` means there is nothing older.
+ */
+export async function fetchEvents(options: { cursor?: string } = {}): Promise<EventPage> {
+  const params = new URLSearchParams();
+  if (options.cursor !== undefined) params.set('cursor', options.cursor);
+  const query = params.toString();
+  return apiRequest<EventPage>(query ? `/events?${query}` : '/events');
 }
 
 /**

@@ -103,8 +103,12 @@ export function pickSpotlight(comparison: PlanComparison | null): Spotlight | nu
 
 // ── Events that are not meals ──────────────────────────────────────────────────
 
-/** Presentation only. Meals are absent: `meals.ts` renders them from their own endpoint. */
-const EVENT_ICON: Record<Exclude<EventType, 'meal'>, string> = {
+/**
+ * Presentation only. Today never shows the meal one — `meals.ts` renders meals from their
+ * own endpoint — but History lists every event type, so the map covers them all.
+ */
+export const EVENT_ICON: Record<EventType, string> = {
+  meal: '🍱',
   workout: '🏋️',
   walk: '🚶',
   sleep: '😴',
