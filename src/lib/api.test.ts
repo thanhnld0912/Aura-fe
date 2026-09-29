@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, NetworkError, apiRequest, exchangeSession, fetchEvents, type EventPage } from './api';
+import { ApiError, NetworkError, apiRequest, exchangeSession, fetchEvents, fetchWeeklyReport, requestWeeklyStory, type EventPage } from './api';
+import { insufficientWeek, storyResult, sufficientWeek } from '../test/weekly';
 
 /**
  * What the API client must get right: the token is attached automatically, it comes
@@ -158,5 +159,57 @@ describe('fetchEvents', () => {
     await expect(fetchEvents({ cursor: 'abc' })).rejects.toMatchObject({ status: 401, isUnauthenticated: true });
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('weekly insights', () => {
+  it('asks for this week with no parameters, authenticated, and returns the report as sent', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, sufficientWeek()));
+
+    await expect(fetchWeeklyReport()).resolves.toEqual(sufficientWeek());
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('http://localhost:3001/api/insights/weekly');
+    expect(init.method).toBe('GET');
+    expect((init.headers as Record<string, string>)['Authorization']).toBe('Bearer a.supabase.jwt');
+  });
+
+  it('returns an insufficient_data week as data, not as an error', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, insufficientWeek()));
+    await expect(fetchWeeklyReport()).resolves.toMatchObject({ coverage: { status: 'insufficient_data' } });
+  });
+
+  it('requests the story by POST with an empty body — the server picks the week', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, storyResult('insufficient_data', insufficientWeek())));
+
+    await expect(requestWeeklyStory()).resolves.toMatchObject({ status: 'insufficient_data', story: null });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('http://localhost:3001/api/insights/weekly/story');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({});
+    expect((init.headers as Record<string, string>)['Authorization']).toBe('Bearer a.supabase.jwt');
+  });
+
+  it('surfaces a 401, a missing provider and the daily limit once each, without retrying', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(401, { error: { code: 'UNAUTHENTICATED', message: 'Authentication required', requestId: '01A' } }),
+    );
+    await expect(fetchWeeklyReport()).rejects.toMatchObject({ status: 401, isUnauthenticated: true });
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(503, { error: { code: 'PROVIDER_UNAVAILABLE', message: 'Weekly stories are not available right now', requestId: '01B' } }),
+    );
+    await expect(requestWeeklyStory()).rejects.toMatchObject({ status: 503, code: 'PROVIDER_UNAVAILABLE', requestId: '01B' });
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: { code: 'RATE_LIMITED', message: 'Too many requests', requestId: '01C' } }), {
+        status: 429,
+        headers: { 'Content-Type': 'application/json', 'Retry-After': '7200' },
+      }),
+    );
+    await expect(requestWeeklyStory()).rejects.toMatchObject({ status: 429, retryAfterSeconds: 7200 });
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });

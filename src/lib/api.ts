@@ -16,6 +16,8 @@ import type {
   ParsedMealResult,
   PlanComparison,
   SessionResponse,
+  WeeklyReport,
+  WeeklyStoryResult,
 } from './contract';
 import { getAccessToken } from './supabase';
 
@@ -139,6 +141,12 @@ export type {
   SessionResponse,
   SizeLabel,
   UpdateMealInput,
+  WeeklyComparisonMetric,
+  WeeklyLimitation,
+  WeeklyPattern,
+  WeeklyReport,
+  WeeklyStory,
+  WeeklyStoryResult,
 } from './contract';
 export { DAY_TAGS, MEAL_UNITS, MOODS, SIZE_LABELS } from './contract';
 
@@ -308,6 +316,28 @@ export async function saveCheckin(input: CheckinInput): Promise<Checkin> {
 export async function fetchRecentCheckins(): Promise<Checkin[]> {
   const { data } = await apiRequest<{ data: Checkin[] }>('/checkins');
   return data;
+}
+
+// ── Weekly insights ────────────────────────────────────────────────────────────
+
+/**
+ * This week's facts. Called without `weekStart`, deliberately: which Monday "this week"
+ * began on is the server's answer, from the profile timezone. No model is involved.
+ */
+export async function fetchWeeklyReport(): Promise<WeeklyReport> {
+  return apiRequest<WeeklyReport>('/insights/weekly');
+}
+
+/**
+ * Asks the server to write this week's story. A reasoning-model call, rate-limited to a
+ * few a day and never cached — so it is only ever made on an explicit request.
+ *
+ * `insufficient_data` and `disabled` are answers, not failures: they come back as a 200
+ * with `story: null`. A missing provider (503), an output that failed the server's own
+ * checks (422) and the daily limit (429) are failures, and throw.
+ */
+export async function requestWeeklyStory(): Promise<WeeklyStoryResult> {
+  return apiRequest<WeeklyStoryResult>('/insights/weekly/story', { method: 'POST', body: {} });
 }
 
 // ── Food search and nutrition calculation ──────────────────────────────────────

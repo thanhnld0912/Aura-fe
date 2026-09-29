@@ -24,8 +24,8 @@ function SignedInApp() {
   const { user } = useAuth();
   const streakCount = user?.streakDays ?? 0;
   // Today is served by the API: meals, the plan comparison and the day's other
-  // events. History loads its own pages each time it is opened. Insights, Crew and
-  // the coach are still prototype fixtures; replacing them is a later slice.
+  // events. History and Insights load their own data each time they are opened.
+  // Crew and the coach are still prototype fixtures; replacing them is a later slice.
   const today = useTodayMeals();
   const plan = useTodayPlan();
   const [crew, setCrew] = useState<CrewMember[]>(INITIAL_CREW);

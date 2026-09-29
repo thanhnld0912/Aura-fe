@@ -147,6 +147,25 @@ export type CheckinInput = Body<'/api/checkins', 'post'>;
 export type Mood = CheckinInput['mood'];
 export type DayTag = NonNullable<CheckinInput['dayTag']>;
 
+// ── Weekly insights ────────────────────────────────────────────────────────────
+
+/**
+ * The week's facts, as `GET /api/insights/weekly` computes them — deterministically, in
+ * the profile timezone, Monday to Sunday. Every figure, rate, comparison and limitation
+ * is the backend's; a behaviour figure with no data behind it is `null`, never 0.
+ */
+export type WeeklyReport = Response<'/api/insights/weekly', 'get', 200>;
+export type WeeklyLimitation = WeeklyReport['dataQuality']['limitations'][number];
+export type WeeklyComparisonMetric = WeeklyReport['comparison']['metrics'][number];
+export type WeeklyPattern = WeeklyReport['patterns']['items'][number];
+
+/**
+ * `POST /api/insights/weekly/story`: the report again, plus prose written from it — or,
+ * when the status is `insufficient_data` or `disabled`, no prose at all.
+ */
+export type WeeklyStoryResult = Response<'/api/insights/weekly/story', 'post', 200>;
+export type WeeklyStory = NonNullable<WeeklyStoryResult['story']>;
+
 // ── Auth ───────────────────────────────────────────────────────────────────────
 
 export type SessionResponse = Response<'/api/auth/session', 'post', 200>;
