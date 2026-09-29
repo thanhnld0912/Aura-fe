@@ -1,5 +1,6 @@
 import { getConfig } from './config';
 import type {
+  AgentChatResponse,
   AuraUser,
   CalculationResult,
   Checkin,
@@ -110,6 +111,13 @@ export class NetworkError extends Error {
  */
 export type {
   Adherence,
+  AgentChatInput,
+  AgentChatResponse,
+  AgentIntent,
+  AgentReplyKind,
+  AgentSection,
+  AgentSectionKind,
+  AgentStatement,
   AuraUser,
   CalculatedItem,
   Checkin,
@@ -338,6 +346,41 @@ export async function fetchWeeklyReport(): Promise<WeeklyReport> {
  */
 export async function requestWeeklyStory(): Promise<WeeklyStoryResult> {
   return apiRequest<WeeklyStoryResult>('/insights/weekly/story', { method: 'POST', body: {} });
+}
+
+// ── The AI coach ───────────────────────────────────────────────────────────────
+
+/**
+ * One message to the agent, one reply back.
+ *
+ * The body is the message and nothing else — the backend schema is `additionalProperties:
+ * false`, so a conversation id, a history array or a client timestamp would each be a
+ * 400. There is nothing to thread: see `AgentChatResponse` for why the endpoint is
+ * stateless and what that costs.
+ *
+ * **`boundary`, `support` and `disabled` are answers, not failures.** They arrive as a
+ * 200 and are rendered like any other reply. What throws:
+ *
+ *   400  the message was empty or over 2000 characters
+ *   401  no session, or one the server would not accept
+ *   422  the model's output failed the server's own schema and evidence checks
+ *   429  past 30 messages an hour; carries `Retry-After`
+ *   502  the provider refused the request, and would refuse it again
+ *   503  no provider is configured, or it is temporarily down
+ *
+ * Only 400, 401 and 429 are in the published OpenAPI document; the rest come from the
+ * shared error mapper in `ai/ai.service.ts` and are just as real. See the report's
+ * OPENAPI GAPS.
+ */
+export async function sendChatMessage(
+  message: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<AgentChatResponse> {
+  return apiRequest<AgentChatResponse>('/agent/chat', {
+    method: 'POST',
+    body: { message },
+    ...(options.signal ? { signal: options.signal } : {}),
+  });
 }
 
 // ── Food search and nutrition calculation ──────────────────────────────────────

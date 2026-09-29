@@ -1,86 +1,178 @@
 import React, { useState } from 'react';
+import { useCoachChat, type CoachMessage } from '../hooks/useCoachChat';
+import { ApiError, type AgentChatResponse, type NetworkError } from '../lib/api';
+import { AGENT_MESSAGE_MAX_LENGTH, describeChatFailure, sectionKindLabel } from '../lib/coach';
 import { ASSETS } from '../data/initialData';
 
-interface Message {
-  id: string;
-  sender: 'aura' | 'user';
-  text: string;
-  time: string;
-  suggestionPill?: string;
-}
+/**
+ * Talk with AURA.
+ *
+ * Every assistant word on this screen came from `POST /api/agent/chat` in this session.
+ * There is no opening greeting, no example exchange, no canned reply and no timer
+ * pretending to think: the previous version of this file had all four, and they were
+ * indistinguishable from a working integration right up until someone read the network
+ * tab.
+ *
+ * What is rendered is what the contract returns, in the shape it returns it. The four
+ * reply kinds — `answer`, `boundary`, `support`, `disabled` — all arrive as a 200 and
+ * are all shown as the assistant speaking, because that is what they are. This
+ * component adds no interpretation to any of them, and in particular does not decorate
+ * `support`: that text is the backend's crisis reply, written by people, and making it
+ * louder or softer here would be this app forming its own opinion about a person's
+ * safety.
+ *
+ * Timestamps are absent on purpose. The server sends none, the conversation lasts as
+ * long as the screen does, and a clock reading invented next to a reply would be the
+ * same class of fiction as the canned replies that used to live here.
+ */
+
+const bubbleBase = 'max-w-[80%] rounded-2xl p-4 text-xs sm:text-sm leading-relaxed';
+
+/** The provenance line: the server's own audit list of what it read, verbatim. */
+const UsedContext: React.FC<{ used: string[] }> = ({ used }) =>
+  used.length === 0 ? null : (
+    <p className="mt-3 pt-2 border-t border-[#eee7e1] text-[10px] text-[#8a726a]">
+      Based on{' '}
+      <span className="font-mono text-[#56423b]">{used.join(', ')}</span>
+    </p>
+  );
+
+/** One reply, field by field. Nothing is reworded and nothing is added. */
+const ReplyBody: React.FC<{ reply: AgentChatResponse }> = ({ reply }) => (
+  <>
+    <p className="whitespace-pre-wrap">{reply.answer.text}</p>
+
+    {reply.sections.map((section, index) => (
+      <div key={index} className="mt-3 pt-3 border-t border-[#eee7e1] space-y-1">
+        <div className="flex items-baseline gap-2 flex-wrap">
+          <h3 className="font-bold text-[#1e1b17]">{section.title}</h3>
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-[#8a726a]">
+            {sectionKindLabel(section.kind)}
+          </span>
+        </div>
+        <p className="whitespace-pre-wrap">{section.text}</p>
+      </div>
+    ))}
+
+    {reply.suggestions.length > 0 && (
+      <ul className="mt-3 space-y-1.5">
+        {reply.suggestions.map((suggestion, index) => (
+          <li
+            key={index}
+            className="px-3 py-1.5 rounded-2xl bg-white text-[#0b513b] text-xs font-semibold border border-[#adedd0]"
+          >
+            🌿 {suggestion.text}
+          </li>
+        ))}
+      </ul>
+    )}
+
+    {reply.caveats.length > 0 && (
+      <ul className="mt-3 space-y-1">
+        {reply.caveats.map((caveat, index) => (
+          <li key={index} className="text-[11px] text-[#8a726a] leading-relaxed">
+            {caveat.text}
+          </li>
+        ))}
+      </ul>
+    )}
+
+    <UsedContext used={reply.usedContext} />
+  </>
+);
+
+const Bubble: React.FC<{ message: CoachMessage }> = ({ message }) => (
+  <div className={`flex items-start gap-3 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}>
+    {message.role === 'assistant' ? (
+      <div className="w-9 h-9 rounded-full bg-[#ffdbce] text-[#7f2b01] flex items-center justify-center text-sm font-bold flex-shrink-0 shadow-xs">
+        ✨
+      </div>
+    ) : (
+      <img
+        alt="You"
+        src={ASSETS.thanhAvatar}
+        className="w-9 h-9 rounded-full object-cover ring-2 ring-[#ffdbce] flex-shrink-0"
+      />
+    )}
+    <div
+      className={
+        message.role === 'user'
+          ? `${bubbleBase} bg-[#9f4118] text-white rounded-tr-none`
+          : `${bubbleBase} bg-[#faf2ec] text-[#1e1b17] rounded-tl-none border border-[#eee7e1]`
+      }
+    >
+      {message.role === 'user' ? (
+        <p className="whitespace-pre-wrap">{message.text}</p>
+      ) : (
+        <ReplyBody reply={message.reply} />
+      )}
+    </div>
+  </div>
+);
+
+/** A failed send: what went wrong, when it can be tried again, and the id to quote. */
+const SendFailure: React.FC<{
+  error: ApiError | NetworkError;
+  onRetry: () => void;
+}> = ({ error, onRetry }) => {
+  const failure = describeChatFailure(error);
+
+  return (
+    <div role="alert" className="p-3 rounded-2xl bg-white border border-[#ffdbce] space-y-1.5 ml-12">
+      <p className="text-xs text-[#56423b]">{failure.message}</p>
+      {failure.wait && (
+        <p className="text-[11px] text-[#8a726a]">You can try again in about {failure.wait}.</p>
+      )}
+      {failure.requestId && (
+        <p className="text-[10px] text-[#bda99f] font-mono break-all">Request {failure.requestId}</p>
+      )}
+      {failure.retryable && (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="mt-1 px-3 py-1.5 rounded-full bg-[#ff8a5b] hover:bg-[#f5763f] text-white text-xs font-bold transition-colors"
+        >
+          Try again
+        </button>
+      )}
+    </div>
+  );
+};
+
+/**
+ * Before the first message. Guidance, not a fabricated opening line: it says what this
+ * assistant can be asked about, which is the same scope the backend enforces.
+ */
+const EmptyState: React.FC = () => (
+  <div className="h-full flex flex-col items-center justify-center text-center px-6">
+    <div className="w-12 h-12 rounded-full bg-[#ffdbce] text-[#7f2b01] flex items-center justify-center text-lg shadow-xs">
+      ✨
+    </div>
+    <p className="mt-3 text-sm font-bold text-[#1e1b17]">Ask AURA about your rhythm</p>
+    <p className="mt-1 text-xs text-[#8a726a] leading-relaxed max-w-xs">
+      Your meals, your plan, your week, your check-ins. Each message is answered on its own —
+      this conversation is not saved.
+    </p>
+  </div>
+);
+
+const quickPrompts = [
+  'How did my meals go today?',
+  'What does my week look like so far?',
+  'How am I doing against my plan?',
+  'What have my check-ins been like?',
+];
 
 export const AICoachView: React.FC = () => {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 'm1',
-      sender: 'aura',
-      text: 'Xin chào Thanh! 🌿 I am your mindful companion AURA. There are no expectations or rigid calorie targets here. How is your rhythm feeling today?',
-      time: '16:45 PM',
-    },
-    {
-      id: 'm2',
-      sender: 'user',
-      text: 'I felt a bit guilty because I missed my planned gym workout this evening.',
-      time: '16:46 PM',
-    },
-    {
-      id: 'm3',
-      sender: 'aura',
-      text: 'I hear you, and that is completely natural to feel. But let’s gently reframe it: you went for a 40-minute walk at 18:30 instead. Your body was communicating fatigue after a full week, and you chose gentle sustained circulation instead of punishing strain. You didn’t abandon your rhythm — you adapted it mindfully. That is true health craftsmanship. 🍵',
-      time: '16:47 PM',
-      suggestionPill: 'Would you like a 5-minute restorative bedtime breathing prompt?',
-    },
-  ]);
-
+  const chat = useCoachChat();
   const [inputVal, setInputVal] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
 
-  const quickPrompts = [
-    'Help me reframe missing gym today',
-    'Gentle dinner ideas for late evenings',
-    'How to sleep better after a busy week',
-    'Mindful Vietnamese home cooking tips',
-  ];
+  const sending = chat.status === 'sending';
 
-  const handleSend = (text: string) => {
-    if (!text.trim()) return;
-
-    const userMsg: Message = {
-      id: 'u-' + Date.now(),
-      sender: 'user',
-      text: text.trim(),
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
-
-    setMessages((prev) => [...prev, userMsg]);
+  const submit = (text: string): void => {
+    if (!chat.canSend(text)) return;
+    chat.send(text);
     setInputVal('');
-    setIsTyping(true);
-
-    setTimeout(() => {
-      let replyText =
-        'Thank you for sharing this with me. Remember that consistency is not about doing 100% every single day; it is about showing up with kindness for where you are right now. Let your body rest, stay hydrated with warm water, and honor your pace.';
-
-      if (text.toLowerCase().includes('dinner') || text.toLowerCase().includes('tối')) {
-        replyText =
-          'For a late or gentle dinner, favor warm comforting soups like Canh cải bắp thịt bằm, Canh chua cá, or steamed egg with a small bowl of rice. Warm broth soothes the vagus nerve and aids digestion before bedtime.';
-      } else if (text.toLowerCase().includes('sleep') || text.toLowerCase().includes('ngủ')) {
-        replyText =
-          'To unwind deeply tonight: dim overhead lights 45 minutes before bed, sip warm artichoke or chamomile tea (trà atisô), and disconnect from blue light screens. Your mind will gently settle.';
-      } else if (text.toLowerCase().includes('cook') || text.toLowerCase().includes('cơm')) {
-        replyText =
-          'Vietnamese home cuisine is naturally rich in balance: always having a bowl of broth (canh), colorful vegetables (rau), and moderate protein. Cooking with fresh lemongrass, ginger, and turmeric also reduces inflammation.';
-      }
-
-      const auraReply: Message = {
-        id: 'a-' + Date.now(),
-        sender: 'aura',
-        text: replyText,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
-
-      setMessages((prev) => [...prev, auraReply]);
-      setIsTyping(false);
-    }, 1000);
   };
 
   return (
@@ -105,11 +197,13 @@ export const AICoachView: React.FC = () => {
 
       {/* Quick Prompt Chips */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-        {quickPrompts.map((prompt, idx) => (
+        {quickPrompts.map((prompt) => (
           <button
-            key={idx}
-            onClick={() => handleSend(prompt)}
-            className="px-3.5 py-1.5 rounded-full bg-white hover:bg-[#ffdbce] text-xs font-semibold text-[#1e1b17] border border-[#eee7e1] transition-all flex-shrink-0 shadow-xs active:scale-95"
+            key={prompt}
+            type="button"
+            onClick={() => submit(prompt)}
+            disabled={sending}
+            className="px-3.5 py-1.5 rounded-full bg-white hover:bg-[#ffdbce] text-xs font-semibold text-[#1e1b17] border border-[#eee7e1] transition-all flex-shrink-0 shadow-xs active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {prompt}
           </button>
@@ -120,79 +214,49 @@ export const AICoachView: React.FC = () => {
       <div className="bg-white rounded-3xl p-6 border border-[#eee7e1] shadow-xs flex flex-col h-[500px]">
         {/* Messages scroll area */}
         <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-          {messages.map((m) => (
-            <div
-              key={m.id}
-              className={`flex items-start gap-3 ${
-                m.sender === 'user' ? 'flex-row-reverse' : ''
-              }`}
-            >
-              {m.sender === 'aura' ? (
-                <div className="w-9 h-9 rounded-full bg-[#ffdbce] text-[#7f2b01] flex items-center justify-center text-sm font-bold flex-shrink-0 shadow-xs">
-                  ✨
-                </div>
-              ) : (
-                <img
-                  alt="User"
-                  src={ASSETS.thanhAvatar}
-                  className="w-9 h-9 rounded-full object-cover ring-2 ring-[#ffdbce] flex-shrink-0"
-                />
-              )}
-              <div
-                className={`max-w-[80%] rounded-2xl p-4 text-xs sm:text-sm leading-relaxed ${
-                  m.sender === 'user'
-                    ? 'bg-[#9f4118] text-white rounded-tr-none'
-                    : 'bg-[#faf2ec] text-[#1e1b17] rounded-tl-none border border-[#eee7e1]'
-                }`}
-              >
-                <p>{m.text}</p>
-                {m.suggestionPill && (
-                  <button
-                    onClick={() => handleSend(m.suggestionPill!)}
-                    className="mt-3 px-3 py-1.5 rounded-full bg-white text-[#0b513b] text-xs font-bold border border-[#adedd0] block hover:bg-[#adedd0]/30 transition-colors"
-                  >
-                    🌿 {m.suggestionPill}
-                  </button>
-                )}
-                <div
-                  className={`text-[10px] mt-2 ${
-                    m.sender === 'user' ? 'text-white/70' : 'text-[#8a726a]'
-                  }`}
-                >
-                  {m.time}
-                </div>
-              </div>
-            </div>
-          ))}
+          {chat.messages.length === 0 && chat.status !== 'sending' ? (
+            <EmptyState />
+          ) : (
+            chat.messages.map((message) => <Bubble key={message.id} message={message} />)
+          )}
 
-          {isTyping && (
+          {/* Driven by the request itself: it is on screen exactly while the POST is open. */}
+          {sending && (
             <div className="flex items-center gap-2 text-xs text-[#8a726a] pl-12">
               <span className="w-2 h-2 rounded-full bg-[#ff8a5b] animate-pulse" />
               <span>AURA is reflecting gently...</span>
             </div>
           )}
+
+          {chat.status === 'error' && chat.error && (
+            <SendFailure error={chat.error} onRetry={chat.retry} />
+          )}
         </div>
 
         {/* Input Bar */}
         <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleSend(inputVal);
+          onSubmit={(event) => {
+            event.preventDefault();
+            submit(inputVal);
           }}
           className="pt-4 border-t border-[#eee7e1] flex items-center gap-2"
         >
           <input
             type="text"
-            placeholder="Ask AURA for mindful perspective, meal ideas, or evening reframing..."
+            aria-label="Message AURA"
+            placeholder="Ask AURA about your meals, your plan or your week..."
             value={inputVal}
-            onChange={(e) => setInputVal(e.target.value)}
-            className="flex-1 bg-[#faf2ec] px-4 py-2.5 rounded-full text-xs sm:text-sm text-[#1e1b17] placeholder:text-[#8a726a] focus:outline-none border border-transparent focus:border-[#ff8a5b]"
+            maxLength={AGENT_MESSAGE_MAX_LENGTH}
+            disabled={sending}
+            onChange={(event) => setInputVal(event.target.value)}
+            className="flex-1 bg-[#faf2ec] px-4 py-2.5 rounded-full text-xs sm:text-sm text-[#1e1b17] placeholder:text-[#8a726a] focus:outline-none border border-transparent focus:border-[#ff8a5b] disabled:opacity-60"
           />
           <button
             type="submit"
-            className="px-5 py-2.5 rounded-full bg-[#9f4118] hover:bg-[#ff8a5b] text-white text-xs font-bold transition-all flex items-center gap-1 shadow-xs"
+            disabled={!chat.canSend(inputVal)}
+            className="px-5 py-2.5 rounded-full bg-[#9f4118] hover:bg-[#ff8a5b] text-white text-xs font-bold transition-all flex items-center gap-1 shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <span>Send</span>
+            <span>{sending ? 'Sending…' : 'Send'}</span>
             <span className="material-symbols-outlined text-[16px]">arrow_upward</span>
           </button>
         </form>

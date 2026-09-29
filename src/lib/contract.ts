@@ -166,6 +166,56 @@ export type WeeklyPattern = WeeklyReport['patterns']['items'][number];
 export type WeeklyStoryResult = Response<'/api/insights/weekly/story', 'post', 200>;
 export type WeeklyStory = NonNullable<WeeklyStoryResult['story']>;
 
+// ── The AI coach ───────────────────────────────────────────────────────────────
+
+/**
+ * `POST /api/agent/chat`: one message in, one validated reply out.
+ *
+ * **Stateless, by contract.** The body is `{ message }` and the schema is strict, so
+ * there is no conversation id to send and inventing one would be a 400. The reply
+ * carries no id either. AURA-BE keeps no conversation table and sends the model no
+ * previous turn (`agent.service.ts`), which means a follow-up that depends on the turn
+ * before it gets an answer saying so. Whatever transcript the screen shows belongs to
+ * the screen: this session only, gone on reload, and never claimed to be saved.
+ */
+export type AgentChatInput = Body<'/api/agent/chat', 'post'>;
+export type AgentChatResponse = Response<'/api/agent/chat', 'post', 200>;
+
+/**
+ * Which of four shapes a reply is. **All four arrive as `200`.**
+ *
+ *   answer    the model answered, in scope
+ *   boundary  outside AURA's scope — the model's own judgement, or the safety gate's
+ *   support   the safety gate answered instead of the model, with a written fixed reply
+ *   disabled  this person has AI features turned off in their own preferences
+ *
+ * None of them is an error and none of them is the frontend's decision. `support` in
+ * particular is the backend's crisis path (`agent/safety-responses.ts`): the text is
+ * written by people, the model never sees the message, and this app's whole job is to
+ * show that text as it was written.
+ */
+export type AgentReplyKind = AgentChatResponse['kind'];
+
+/** What the backend classified the message as. Chosen server-side; never sent by us. */
+export type AgentIntent = AgentChatResponse['intent'];
+
+/**
+ * A statement and the source ids behind it.
+ *
+ * `evidence` holds deterministic machine refs — `metric:meals.lunch_days`, `pattern:<id>`
+ * — not prose. They are the server's audit trail for the claim, not a caption.
+ */
+export type AgentStatement = AgentChatResponse['answer'];
+
+export type AgentSection = AgentChatResponse['sections'][number];
+
+/**
+ * `fact` states cited evidence, `interpretation` is a tentative reading of it, `general`
+ * is education that cites nothing and is not about this person. The backend enforces the
+ * difference; showing them alike would throw away the distinction it enforces.
+ */
+export type AgentSectionKind = AgentSection['kind'];
+
 // ── Auth ───────────────────────────────────────────────────────────────────────
 
 export type SessionResponse = Response<'/api/auth/session', 'post', 200>;
