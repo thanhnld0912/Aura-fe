@@ -7804,6 +7804,8 @@
                               "no_checkins",
                               "no_sleep_logs",
                               "pattern_engine_unavailable",
+                              "pattern_evaluation_pending",
+                              "pattern_evaluation_stale",
                               "previous_week_unavailable",
                               "previous_week_insufficient"
                             ]
@@ -8762,6 +8764,8 @@
                                   "no_checkins",
                                   "no_sleep_logs",
                                   "pattern_engine_unavailable",
+                                  "pattern_evaluation_pending",
+                                  "pattern_evaluation_stale",
                                   "previous_week_unavailable",
                                   "previous_week_insufficient"
                                 ]

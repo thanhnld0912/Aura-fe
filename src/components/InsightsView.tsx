@@ -2,11 +2,11 @@ import React from 'react';
 import { useWeeklyInsights } from '../hooks/useWeeklyInsights';
 import { ApiError, type NetworkError, type WeeklyReport, type WeeklyStory } from '../lib/api';
 import {
-  LIMITATION_LABEL,
   comparisonLines,
   dayCells,
   formatWait,
   formatWeekRange,
+  limitationLines,
   patternFactsView,
   statCards,
   weekProgress,
@@ -203,7 +203,7 @@ const WeekBody: React.FC<{
           </div>
         )}
 
-        <PatternFactsCard facts={patternFactsView(report.patternFacts)} />
+        <PatternFactsCard facts={patternFactsView(report.patternFacts, undefined, report.dataQuality.limitations)} />
 
         {/* Patterns the backend found, until a story narrates them with their caveats */}
         {!story && report.patterns.status === 'available' && report.patterns.items.length > 0 && (
@@ -250,9 +250,9 @@ const WeekBody: React.FC<{
         <div className="p-5 rounded-3xl bg-white border border-[#eee7e1] space-y-2">
           <h3 className="text-sm font-bold text-[#1e1b17]">About this week's data</h3>
           <ul className="space-y-1">
-            {report.dataQuality.limitations.map((code) => (
-              <li key={code} className="text-xs text-[#56423b]">
-                {LIMITATION_LABEL[code]}
+            {limitationLines(report.dataQuality.limitations).map((line) => (
+              <li key={line} className="text-xs text-[#56423b]">
+                {line}
               </li>
             ))}
           </ul>

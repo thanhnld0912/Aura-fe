@@ -10,7 +10,9 @@ import {
   formatWeekRange,
   PATTERN_FACTS_LANGUAGE,
   STREAK_WINDOW_DAYS,
+  UNKNOWN_LIMITATION_LABEL,
   insightsLanguage,
+  limitationLines,
   patternFactsView,
   statCards,
   weekProgress,
@@ -177,7 +179,7 @@ describe('patternFactsView', () => {
         range: 'Sep 12 – Sep 23',
         scope: 'Your longest run in the last 45 days',
         current: true,
-        status: 'This run is still going.',
+        status: 'Still going as of Sep 23.',
         observed: 'Something was logged on 32 of the last 45 days.',
         caveat: 'This counts days you logged something, not what you did.',
       },
@@ -220,7 +222,7 @@ describe('patternFactsView', () => {
       runLength: '12 ngày liên tiếp',
       range: '12 thg 9 – 23 thg 9',
       scope: 'Chuỗi dài nhất của bạn trong 45 ngày gần nhất',
-      status: 'Chuỗi này vẫn đang tiếp diễn.',
+      status: 'Vẫn đang tiếp diễn tính đến 23 thg 9.',
       observed: 'Bạn có ghi nhận vào 32 trong 45 ngày gần nhất.',
       caveat: 'Chỉ tính những ngày bạn có ghi nhận dữ liệu, không phản ánh bạn đã làm gì trong những ngày đó.',
     });
@@ -249,5 +251,104 @@ describe('patternFactsView', () => {
         expect(text).not.toMatch(/correlat|associat|caus|predict|likely|because|tương quan|nguyên nhân|dự đoán/i);
       }
     }
+  });
+});
+
+describe('patternFactsView — evaluation state from the backend', () => {
+  it('says "not yet" for a person no evaluation has reached, never "no streak found"', () => {
+    const view = patternFactsView(patternFacts('unavailable'), 'en', ['week_in_progress', 'pattern_evaluation_pending']);
+    expect(view).toMatchObject({ state: 'unavailable', message: 'This is not available yet.', items: [] });
+    expect(view.message).not.toMatch(/no qualifying|not found|no run|no streak/i);
+  });
+
+  it('says "out of date" when the backend withheld stale evidence', () => {
+    const view = patternFactsView(patternFacts('unavailable'), 'en', ['pattern_evaluation_stale']);
+    expect(view).toMatchObject({ state: 'unavailable', message: 'This is temporarily out of date.', items: [] });
+  });
+
+  it('keeps the general wording for every other reason, and when the report gives none', () => {
+    for (const limitations of [[], ['pattern_engine_unavailable'], ['week_in_progress']] as const) {
+      expect(patternFactsView(patternFacts('unavailable'), 'en', limitations).message).toBe(
+        'This information is not available right now.',
+      );
+    }
+    expect(patternFactsView(undefined, 'en', ['pattern_evaluation_pending']).message).toBe('This is not available yet.');
+  });
+
+  it('lets a limitation change the wording of unavailable only — never of none or available', () => {
+    const stale = ['pattern_evaluation_stale', 'pattern_evaluation_pending'] as const;
+    expect(patternFactsView(patternFacts('none'), 'en', stale).message).toBe(
+      'No qualifying logging streak was found in the last 45 days.',
+    );
+    expect(patternFactsView(patternFacts('available'), 'en', stale)).toEqual(patternFactsView(patternFacts('available'), 'en'));
+  });
+
+  it('dates an ongoing run by the evidence, not by today', () => {
+    // The backend may serve evidence one closed day behind: the run is "still going" as of then.
+    const fact = streakFact({ windowEnd: '2026-09-22', run: { from: '2026-09-11', to: '2026-09-22', length: 12 } });
+    const [line] = patternFactsView(patternFacts('available', fact), 'en').items;
+    expect(line!.status).toBe('Still going as of Sep 22.');
+    expect(line!.status).not.toMatch(/today|now|currently/i);
+  });
+
+  it('has Vietnamese for the new states too', () => {
+    expect(patternFactsView(patternFacts('unavailable'), 'vi', ['pattern_evaluation_pending']).message).toBe('Thông tin này chưa có.');
+    expect(patternFactsView(patternFacts('unavailable'), 'vi', ['pattern_evaluation_stale']).message).toBe(
+      'Thông tin này tạm thời chưa được cập nhật.',
+    );
+  });
+
+  it('words the new limitations neutrally', () => {
+    expect(LIMITATION_LABEL.pattern_evaluation_pending).toBe('Pattern insights are not available yet.');
+    expect(LIMITATION_LABEL.pattern_evaluation_stale).toBe('Pattern insights are temporarily out of date.');
+  });
+});
+
+describe('limitationLines — codes this build does not know', () => {
+  const unknown = (codes: string[]) => limitationLines(codes);
+
+  it('words every known code exactly as before, in the backend’s order', () => {
+    const codes = Object.keys(LIMITATION_LABEL) as Array<keyof typeof LIMITATION_LABEL>;
+    expect(limitationLines(codes)).toEqual(codes.map((code) => LIMITATION_LABEL[code]));
+    expect(limitationLines([])).toEqual([]);
+  });
+
+  it('gives an unknown code a neutral line — never an empty one', () => {
+    const lines = unknown(['week_in_progress', 'pattern_source_degraded']);
+    expect(lines).toEqual(['The week is still in progress.', UNKNOWN_LIMITATION_LABEL]);
+    for (const line of lines) expect(line.trim()).not.toBe('');
+  });
+
+  it('says the unknown line once, however many unknown codes arrive', () => {
+    expect(unknown(['something_new', 'something_else', 'no_sleep_logs', 'a_third'])).toEqual([
+      UNKNOWN_LIMITATION_LABEL,
+      'No sleep was logged.',
+    ]);
+  });
+
+  it('does not read an unknown code as a known state, or as "nothing found"', () => {
+    expect(UNKNOWN_LIMITATION_LABEL).not.toMatch(/no (qualifying|pattern|streak)|not found|out of date|not available yet|fail|should|must|bad/i);
+    // A code that merely resembles a known one is still unknown.
+    expect(unknown(['pattern_evaluation_pending_v2'])).toEqual([UNKNOWN_LIMITATION_LABEL]);
+    expect(unknown(['toString', 'constructor', '__proto__'])).toEqual([UNKNOWN_LIMITATION_LABEL]);
+  });
+
+  it('leaves the logging-consistency wording to the codes it knows', () => {
+    const view = patternFactsView(patternFacts('unavailable'), 'en', ['pattern_source_degraded'] as never);
+    expect(view.message).toBe('This information is not available right now.');
+  });
+});
+
+describe('comparisonLines — a metric this build does not know', () => {
+  it('leaves it out rather than naming it "undefined"', () => {
+    const lines = comparisonLines({
+      previousWeekStart: '2026-09-14',
+      status: 'available',
+      metrics: [
+        { metric: 'sleep_regularity' as never, status: 'available', current: 0.5, previous: 0.4, delta: 0.1, direction: 'up' },
+        { metric: 'habit_completion', status: 'available', current: 0.5, previous: 0.45, delta: 0.05, direction: 'flat' },
+      ],
+    });
+    expect(lines).toEqual(['Habit completion: 50%, about the same as last week']);
   });
 });

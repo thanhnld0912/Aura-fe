@@ -121,6 +121,8 @@ const METRIC_LABEL: Record<WeeklyComparisonMetric['metric'], string> = {
 export function comparisonLines(comparison: WeeklyReport['comparison']): string[] {
   return comparison.metrics
     .filter((metric) => metric.status === 'available' && metric.delta !== null)
+    // A metric a newer backend added has no wording here; it is left out, not shown unnamed.
+    .filter((metric) => Object.prototype.hasOwnProperty.call(METRIC_LABEL, metric.metric))
     .map((metric) => {
       const points = Math.abs(Math.round(metric.delta! * 100));
       const change =
@@ -143,9 +145,34 @@ export const LIMITATION_LABEL: Record<WeeklyLimitation, string> = {
   no_checkins: 'No check-ins were saved.',
   no_sleep_logs: 'No sleep was logged.',
   pattern_engine_unavailable: 'Pattern detection is not available yet.',
+  pattern_evaluation_pending: 'Pattern insights are not available yet.',
+  pattern_evaluation_stale: 'Pattern insights are temporarily out of date.',
   previous_week_unavailable: 'Last week has no logs to compare with.',
   previous_week_insufficient: 'Last week has too few logs to compare with.',
 };
+
+/**
+ * What is said for a limitation code this build has no wording for — a backend newer than
+ * the page can send one. It says only that something is missing: an unknown code is never
+ * read as a known one, and never as "nothing was found".
+ */
+export const UNKNOWN_LIMITATION_LABEL = 'Some of this week’s information is not available.';
+
+/**
+ * The limitations to list, in the backend's order: each known code in its own words, and
+ * every unknown code as the one neutral line, shown once however many there are. Nothing is
+ * ever listed as an empty line.
+ */
+export function limitationLines(codes: readonly string[]): string[] {
+  const lines: string[] = [];
+  for (const code of codes) {
+    const line = Object.prototype.hasOwnProperty.call(LIMITATION_LABEL, code)
+      ? LIMITATION_LABEL[code as WeeklyLimitation]
+      : UNKNOWN_LIMITATION_LABEL;
+    if (!lines.includes(line)) lines.push(line);
+  }
+  return lines;
+}
 
 export interface DayCell {
   localDate: string;
@@ -210,10 +237,12 @@ const PATTERN_FACT_COPY = {
     heading: 'Logging consistency',
     source: 'Counted from your logs',
     unavailable: 'This information is not available right now.',
+    pending: 'This is not available yet.',
+    outOfDate: 'This is temporarily out of date.',
     none: (window: number) => `No qualifying logging streak was found in the last ${window} days.`,
     runLength: (n: number) => `${n} ${n === 1 ? 'day' : 'days'} in a row`,
     scope: (window: number) => `Your longest run in the last ${window} days`,
-    current: 'This run is still going.',
+    current: (asOf: string) => `Still going as of ${asOf}.`,
     ended: (to: string) => `This run ended on ${to}.`,
     observed: (observed: number, window: number) => `Something was logged on ${observed} of the last ${window} days.`,
   },
@@ -221,10 +250,12 @@ const PATTERN_FACT_COPY = {
     heading: 'Tính đều đặn khi ghi nhận',
     source: 'Đếm từ nhật ký của bạn',
     unavailable: 'Thông tin này hiện chưa khả dụng.',
+    pending: 'Thông tin này chưa có.',
+    outOfDate: 'Thông tin này tạm thời chưa được cập nhật.',
     none: (window: number) => `Không tìm thấy chuỗi ngày ghi nhận đủ điều kiện trong ${window} ngày gần nhất.`,
     runLength: (n: number) => `${n} ngày liên tiếp`,
     scope: (window: number) => `Chuỗi dài nhất của bạn trong ${window} ngày gần nhất`,
-    current: 'Chuỗi này vẫn đang tiếp diễn.',
+    current: (asOf: string) => `Vẫn đang tiếp diễn tính đến ${asOf}.`,
     ended: (to: string) => `Chuỗi này kết thúc vào ${to}.`,
     observed: (observed: number, window: number) => `Bạn có ghi nhận vào ${observed} trong ${window} ngày gần nhất.`,
   },
@@ -250,7 +281,7 @@ export interface PatternFactLine {
   /** "Your longest run in the last 45 days". */
   scope: string;
   current: boolean;
-  /** Whether the run is still going, or the day it ended. */
+  /** Still going as of the day the evidence was evaluated through, or the day the run ended. */
   status: string;
   /** "Something was logged on 32 of the last 45 days." */
   observed: string;
@@ -278,7 +309,9 @@ function factLine(fact: WeeklyPatternFact, language: InsightsLanguage): PatternF
     range: fact.run.from === fact.run.to ? to : `${formatDay(fact.run.from, language)} – ${to}`,
     scope: copy.scope(fact.windowDays),
     current: fact.current,
-    status: fact.current ? copy.current : copy.ended(to),
+    // `current` is true of the evidence's own last day (`windowEnd`), which the backend may
+    // serve a day behind — so it is stated as of that date, never as of today.
+    status: fact.current ? copy.current(formatDay(fact.windowEnd, language)) : copy.ended(to),
     observed: copy.observed(fact.observedDays, fact.windowDays),
     caveat: fact.caveat === null ? null : (vi?.caveat ?? fact.caveat),
   };
@@ -290,16 +323,26 @@ function factLine(fact: WeeklyPatternFact, language: InsightsLanguage): PatternF
  * here counts a day. `unavailable` (and a report from a server that sends no such section)
  * is said as "not available", never as "no streak": only `none` means the backend looked
  * and found no run to show — over its own observation window, not the week on screen.
+ *
+ * Why it is unavailable is the backend's to say, in `dataQuality.limitations`: not evaluated
+ * for this person yet, or evaluated too long ago to present as current. Whether evidence is
+ * fresh enough is decided there; nothing here compares a date with today.
  */
 export function patternFactsView(
   patternFacts: WeeklyReport['patternFacts'] | null | undefined,
   language: InsightsLanguage = PATTERN_FACTS_LANGUAGE,
+  limitations: readonly WeeklyLimitation[] = [],
 ): PatternFactsView {
   const copy = PATTERN_FACT_COPY[language];
   const base = { heading: copy.heading, source: copy.source };
 
   if (!patternFacts || patternFacts.status === 'unavailable') {
-    return { ...base, state: 'unavailable', message: copy.unavailable, items: [] };
+    const message = limitations.includes('pattern_evaluation_pending')
+      ? copy.pending
+      : limitations.includes('pattern_evaluation_stale')
+        ? copy.outOfDate
+        : copy.unavailable;
+    return { ...base, state: 'unavailable', message, items: [] };
   }
   if (patternFacts.status === 'none') {
     return { ...base, state: 'none', message: copy.none(STREAK_WINDOW_DAYS), items: [] };

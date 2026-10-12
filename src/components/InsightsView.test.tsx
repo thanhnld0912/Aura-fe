@@ -301,7 +301,7 @@ describe('InsightsView · logging consistency', () => {
     expect(within(region).getByText('No qualifying logging streak was found in the last 45 days.')).toBeInTheDocument();
     // The only figure is the observation window: no run, no count of logged days.
     expect(within(region).getAllByText(/\d/)).toHaveLength(1);
-    expect(within(region).queryByText(/in a row|Something was logged|This run/)).not.toBeInTheDocument();
+    expect(within(region).queryByText(/in a row|Something was logged|This run|Still going/)).not.toBeInTheDocument();
     expect(within(region).queryByText(/not available/)).not.toBeInTheDocument();
     expect(within(region).queryByText(/this week|at least/i)).not.toBeInTheDocument();
   });
@@ -312,7 +312,7 @@ describe('InsightsView · logging consistency', () => {
     const region = await facts();
     expect(within(region).getByText('12 days in a row')).toBeInTheDocument();
     expect(within(region).getByText('Sep 12 – Sep 23 · Your longest run in the last 45 days')).toBeInTheDocument();
-    expect(within(region).getByText('This run is still going.')).toBeInTheDocument();
+    expect(within(region).getByText('Still going as of Sep 23.')).toBeInTheDocument();
     expect(within(region).getByText('Something was logged on 32 of the last 45 days.')).toBeInTheDocument();
     expect(within(region).getByText(streakFact().caveat!)).toBeInTheDocument();
     expect(within(region).getByText('Counted from your logs')).toBeInTheDocument();
@@ -324,7 +324,7 @@ describe('InsightsView · logging consistency', () => {
     const region = await facts();
     expect(within(region).getByText('Aug 20 – Aug 31 · Your longest run in the last 45 days')).toBeInTheDocument();
     expect(within(region).getByText('This run ended on Aug 31.')).toBeInTheDocument();
-    expect(within(region).queryByText('This run is still going.')).not.toBeInTheDocument();
+    expect(within(region).queryByText(/Still going/)).not.toBeInTheDocument();
   });
 
   it('stays in English for a Vietnamese profile, like the rest of the page', async () => {
@@ -334,7 +334,7 @@ describe('InsightsView · logging consistency', () => {
     const region = await facts('Logging consistency');
     expect(within(region).getByText('12 days in a row')).toBeInTheDocument();
     expect(within(region).getByText('Sep 12 – Sep 23 · Your longest run in the last 45 days')).toBeInTheDocument();
-    expect(within(region).getByText('This run is still going.')).toBeInTheDocument();
+    expect(within(region).getByText('Still going as of Sep 23.')).toBeInTheDocument();
     expect(within(region).getByText('Something was logged on 32 of the last 45 days.')).toBeInTheDocument();
     expect(within(region).getByText(streakFact().caveat!)).toBeInTheDocument();
     expect(within(region).getByText('Counted from your logs')).toBeInTheDocument();
@@ -416,5 +416,86 @@ describe('InsightsView · logging consistency', () => {
     expect(
       within(await facts()).getByText('No qualifying logging streak was found in the last 45 days.'),
     ).toBeInTheDocument();
+  });
+});
+
+/** Why the streak is unavailable is the backend's to say; the page words it and adds nothing. */
+describe('InsightsView · evaluation state', () => {
+  const facts = () => screen.findByRole('region', { name: 'Logging consistency' });
+  const unavailableBecause = (limitation: 'pattern_evaluation_pending' | 'pattern_evaluation_stale') => ({
+    ...sufficientWeek(),
+    dataQuality: { limitations: ['week_in_progress', limitation] as const },
+  });
+
+  it('says "not yet" before the first evaluation — never that no streak was found', async () => {
+    answerReport = async () => json(200, unavailableBecause('pattern_evaluation_pending'));
+    view();
+    const region = await facts();
+    expect(within(region).getByText('This is not available yet.')).toBeInTheDocument();
+    expect(within(region).queryByText(/No qualifying|in a row|Still going/)).not.toBeInTheDocument();
+    expect(screen.getByText('Pattern insights are not available yet.')).toBeInTheDocument();
+    expect(screen.queryByText(/No qualifying logging streak/)).not.toBeInTheDocument();
+  });
+
+  it('says "out of date" when the backend withheld stale evidence, and shows no streak', async () => {
+    answerReport = async () => json(200, unavailableBecause('pattern_evaluation_stale'));
+    view();
+    const region = await facts();
+    expect(within(region).getByText('This is temporarily out of date.')).toBeInTheDocument();
+    expect(within(region).queryByText(/in a row|Still going|This run ended/)).not.toBeInTheDocument();
+    expect(screen.getByText('Pattern insights are temporarily out of date.')).toBeInTheDocument();
+  });
+
+  it('shows no ranked patterns either while the evaluation is out of date', async () => {
+    answerReport = async () => json(200, unavailableBecause('pattern_evaluation_stale'));
+    view();
+    await facts();
+    expect(screen.queryByText('Patterns found')).not.toBeInTheDocument();
+  });
+
+  it('states an ongoing run as of the day the evidence reaches, not as of today', async () => {
+    const fact = streakFact({ windowEnd: '2026-09-22', run: { from: '2026-09-11', to: '2026-09-22', length: 12 } });
+    answerReport = async () => json(200, { ...sufficientWeek(), patternFacts: patternFacts('available', fact) });
+    view();
+    const region = await facts();
+    expect(within(region).getByText('Still going as of Sep 22.')).toBeInTheDocument();
+    expect(within(region).queryByText(/still going\.$/i)).not.toBeInTheDocument();
+  });
+});
+
+/** A backend newer than this page can send a limitation it has no wording for. */
+describe('InsightsView · an unknown limitation', () => {
+  const withLimitations = (limitations: string[]) => ({ ...sufficientWeek(), dataQuality: { limitations } });
+  const about = () => screen.getByText("About this week's data").parentElement!;
+
+  it('shows a neutral line for it — no empty bullet, and the known ones unchanged', async () => {
+    answerReport = async () => json(200, withLimitations(['week_in_progress', 'pattern_source_degraded', 'no_sleep_logs']));
+    view();
+    await screen.findByText('Sep 21 – Sep 27');
+
+    const items = within(about()).getAllByRole('listitem');
+    expect(items.map((item) => item.textContent)).toEqual([
+      'The week is still in progress.',
+      'Some of this week’s information is not available.',
+      'No sleep was logged.',
+    ]);
+    for (const item of items) expect(item.textContent!.trim()).not.toBe('');
+  });
+
+  it('does not turn it into a claim about patterns or the streak', async () => {
+    answerReport = async () => json(200, withLimitations(['pattern_source_degraded']));
+    view();
+    const region = await screen.findByRole('region', { name: 'Logging consistency' });
+    // The streak card keeps its own backend state: unavailable, in the general wording.
+    expect(within(region).getByText('This information is not available right now.')).toBeInTheDocument();
+    expect(screen.queryByText(/No qualifying|not available yet|out of date/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Patterns found')).not.toBeInTheDocument();
+  });
+
+  it('shows the section at all when the only limitation is unknown', async () => {
+    answerReport = async () => json(200, withLimitations(['something_new']));
+    view();
+    await screen.findByText('Sep 21 – Sep 27');
+    expect(within(about()).getAllByRole('listitem')).toHaveLength(1);
   });
 });
