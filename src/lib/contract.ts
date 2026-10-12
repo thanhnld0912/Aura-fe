@@ -172,6 +172,8 @@ export type WeeklyReport = Response<'/api/insights/weekly', 'get', 200>;
 export type WeeklyLimitation = WeeklyReport['dataQuality']['limitations'][number];
 export type WeeklyComparisonMetric = WeeklyReport['comparison']['metrics'][number];
 export type WeeklyPattern = WeeklyReport['patterns']['items'][number];
+/** A counted fact about the logs — today, the logging streak. Never ranked, never narrated. */
+export type WeeklyPatternFact = WeeklyReport['patternFacts']['items'][number];
 
 /**
  * `POST /api/insights/weekly/story`: the report again, plus prose written from it — or,

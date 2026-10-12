@@ -1,4 +1,4 @@
-import type { WeeklyReport, WeeklyStory, WeeklyStoryResult } from '../lib/api';
+import type { WeeklyPattern, WeeklyPatternFact, WeeklyReport, WeeklyStory, WeeklyStoryResult } from '../lib/api';
 
 /**
  * Weekly report fixtures for tests, typed against the generated contract — so a field the
@@ -116,6 +116,63 @@ export function insufficientWeek(): WeeklyReport {
     },
     comparison: { previousWeekStart: '2026-09-21', status: 'insufficient_data', metrics: [] },
     dataQuality: { limitations: ['week_in_progress', 'insufficient_logging_coverage', 'no_meal_logs'] },
+  };
+}
+
+/**
+ * The logging streak as the backend publishes it: a 12-day run ending on the last closed
+ * day of a 45-day window (10 August – 23 September 2026), 32 of whose days had a log.
+ */
+export function streakFact(overrides: Partial<WeeklyPatternFact> = {}): WeeklyPatternFact {
+  return {
+    id: '5f0c1a52-6f0e-4d7b-9d53-1f2a7c1c9a01',
+    kind: 'streak',
+    key: 'streak:logged_days',
+    subjectMetric: 'logged_day',
+    subjectLabel: 'Logging consistency',
+    strength: 12 / 45,
+    sampleSize: 12,
+    coverage: 32 / 45,
+    windowStart: '2026-08-10',
+    windowEnd: '2026-09-23',
+    windowDays: 45,
+    run: { from: '2026-09-12', to: '2026-09-23', length: 12 },
+    current: true,
+    observedDays: 32,
+    caveat: 'This counts days you logged something, not what you did.',
+    ...overrides,
+  };
+}
+
+/** The same run, but over: the longest in the window ended three weeks before its last day. */
+export function earlierStreakFact(): WeeklyPatternFact {
+  return streakFact({ run: { from: '2026-08-20', to: '2026-08-31', length: 12 }, current: false });
+}
+
+/** `patternFacts` in each state the contract defines. */
+export function patternFacts(
+  status: WeeklyReport['patternFacts']['status'],
+  fact: WeeklyPatternFact = streakFact(),
+): WeeklyReport['patternFacts'] {
+  return { status, items: status === 'available' ? [fact] : [] };
+}
+
+/** A ranked pattern — an association, the kind the streak must never be listed among. */
+export function rankedPattern(): WeeklyPattern {
+  return {
+    id: '8d2b7c7e-3b0a-4c58-8a39-6b5a2d0e7f11',
+    kind: 'correlation',
+    subjectMetric: 'walked',
+    subjectLabel: 'Days with a walk',
+    objectMetric: 'mood_good',
+    objectLabel: 'Good mood',
+    direction: 'positive',
+    strength: 0.52,
+    pValue: 0.04,
+    sampleSize: 18,
+    windowDays: 30,
+    coverage: 0.6,
+    caveat: 'This is an association in your own logs, not a cause.',
   };
 }
 

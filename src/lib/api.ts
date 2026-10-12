@@ -154,6 +154,7 @@ export type {
   WeeklyComparisonMetric,
   WeeklyLimitation,
   WeeklyPattern,
+  WeeklyPatternFact,
   WeeklyReport,
   WeeklyStory,
   WeeklyStoryResult,

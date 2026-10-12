@@ -1,4 +1,4 @@
-import type { WeeklyComparisonMetric, WeeklyLimitation, WeeklyReport } from './api';
+import type { WeeklyComparisonMetric, WeeklyLimitation, WeeklyPatternFact, WeeklyReport } from './api';
 
 /**
  * A weekly report → what `InsightsView` renders.
@@ -163,4 +163,156 @@ export function dayCells(report: WeeklyReport): DayCell[] {
     ),
     state: !day.elapsed || day.tracked === null ? 'upcoming' : day.tracked ? 'logged' : 'not_logged',
   }));
+}
+
+// ── Logging consistency ────────────────────────────────────────────────────────
+
+/** The languages a profile can ask for (`user.locale`). */
+export type InsightsLanguage = 'en' | 'vi';
+
+/**
+ * A profile locale as a language this file has copy for. Not used to pick the card's
+ * language yet (`PATTERN_FACTS_LANGUAGE`); kept for when the whole page is localised.
+ */
+export function insightsLanguage(locale: string | null | undefined): InsightsLanguage {
+  return locale === 'vi' ? 'vi' : 'en';
+}
+
+/**
+ * The language the logging-streak card is shown in. The rest of the app is English only
+ * and has no localisation system, so the card is English too, whatever `user.locale`
+ * says — one card in another language would be the odd one out. The Vietnamese copy
+ * below stays, ready for when the page as a whole is localised.
+ */
+export const PATTERN_FACTS_LANGUAGE: InsightsLanguage = 'en';
+
+/**
+ * The streak detector's observation window, in days. A fact carries its own `windowDays`
+ * and that is what its lines use; `none` arrives with no fact, so the empty state names
+ * the window from here. It mirrors the backend's `STREAK_WINDOW_DAYS` and is a window,
+ * not a threshold.
+ */
+export const STREAK_WINDOW_DAYS = 45;
+
+const DATE_LOCALE: Record<InsightsLanguage, string> = { en: 'en-US', vi: 'vi-VN' };
+
+/** A `YYYY-MM-DD` as "Sep 21" / "21 thg 9" — a calendar day, so formatted in UTC. */
+function formatDay(localDate: string, language: InsightsLanguage): string {
+  const instant = new Date(`${localDate}T12:00:00Z`);
+  if (Number.isNaN(instant.getTime())) return localDate;
+  return new Intl.DateTimeFormat(DATE_LOCALE[language], { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(
+    instant,
+  );
+}
+
+const PATTERN_FACT_COPY = {
+  en: {
+    heading: 'Logging consistency',
+    source: 'Counted from your logs',
+    unavailable: 'This information is not available right now.',
+    none: (window: number) => `No qualifying logging streak was found in the last ${window} days.`,
+    runLength: (n: number) => `${n} ${n === 1 ? 'day' : 'days'} in a row`,
+    scope: (window: number) => `Your longest run in the last ${window} days`,
+    current: 'This run is still going.',
+    ended: (to: string) => `This run ended on ${to}.`,
+    observed: (observed: number, window: number) => `Something was logged on ${observed} of the last ${window} days.`,
+  },
+  vi: {
+    heading: 'Tính đều đặn khi ghi nhận',
+    source: 'Đếm từ nhật ký của bạn',
+    unavailable: 'Thông tin này hiện chưa khả dụng.',
+    none: (window: number) => `Không tìm thấy chuỗi ngày ghi nhận đủ điều kiện trong ${window} ngày gần nhất.`,
+    runLength: (n: number) => `${n} ngày liên tiếp`,
+    scope: (window: number) => `Chuỗi dài nhất của bạn trong ${window} ngày gần nhất`,
+    current: 'Chuỗi này vẫn đang tiếp diễn.',
+    ended: (to: string) => `Chuỗi này kết thúc vào ${to}.`,
+    observed: (observed: number, window: number) => `Bạn có ghi nhận vào ${observed} trong ${window} ngày gần nhất.`,
+  },
+} satisfies Record<InsightsLanguage, unknown>;
+
+/**
+ * Vietnamese for the text the backend sends in English, by the fact's stable key. English
+ * is shown as the server sent it; a key with no translation here falls back to that too.
+ */
+const PATTERN_FACT_VI: Record<string, { label: string; caveat: string }> = {
+  'streak:logged_days': {
+    label: 'Tính đều đặn khi ghi nhận',
+    caveat: 'Chỉ tính những ngày bạn có ghi nhận dữ liệu, không phản ánh bạn đã làm gì trong những ngày đó.',
+  },
+};
+
+export interface PatternFactLine {
+  id: string;
+  /** "12 days in a row" — the backend's run length. */
+  runLength: string;
+  /** "Sep 10 – Sep 21" — the backend's run dates. */
+  range: string;
+  /** "Your longest run in the last 45 days". */
+  scope: string;
+  current: boolean;
+  /** Whether the run is still going, or the day it ended. */
+  status: string;
+  /** "Something was logged on 32 of the last 45 days." */
+  observed: string;
+  /** The backend's hedge, translated when it sent one; `null` when it sent none. */
+  caveat: string | null;
+}
+
+export interface PatternFactsView {
+  state: 'unavailable' | 'none' | 'available';
+  heading: string;
+  /** "Counted from your logs" — what sets this apart from a ranked pattern or a story. */
+  source: string;
+  /** What to say when there is no run to show; `null` when there is one. */
+  message: string | null;
+  items: PatternFactLine[];
+}
+
+function factLine(fact: WeeklyPatternFact, language: InsightsLanguage): PatternFactLine {
+  const copy = PATTERN_FACT_COPY[language];
+  const vi = language === 'vi' ? PATTERN_FACT_VI[fact.key] : undefined;
+  const to = formatDay(fact.run.to, language);
+  return {
+    id: fact.id,
+    runLength: copy.runLength(fact.run.length),
+    range: fact.run.from === fact.run.to ? to : `${formatDay(fact.run.from, language)} – ${to}`,
+    scope: copy.scope(fact.windowDays),
+    current: fact.current,
+    status: fact.current ? copy.current : copy.ended(to),
+    observed: copy.observed(fact.observedDays, fact.windowDays),
+    caveat: fact.caveat === null ? null : (vi?.caveat ?? fact.caveat),
+  };
+}
+
+/**
+ * The logging streak, as `patternFacts` reports it — a counted fact, shown apart from the
+ * ranked patterns. The run, its dates and whether it is current are the backend's; nothing
+ * here counts a day. `unavailable` (and a report from a server that sends no such section)
+ * is said as "not available", never as "no streak": only `none` means the backend looked
+ * and found no run to show — over its own observation window, not the week on screen.
+ */
+export function patternFactsView(
+  patternFacts: WeeklyReport['patternFacts'] | null | undefined,
+  language: InsightsLanguage = PATTERN_FACTS_LANGUAGE,
+): PatternFactsView {
+  const copy = PATTERN_FACT_COPY[language];
+  const base = { heading: copy.heading, source: copy.source };
+
+  if (!patternFacts || patternFacts.status === 'unavailable') {
+    return { ...base, state: 'unavailable', message: copy.unavailable, items: [] };
+  }
+  if (patternFacts.status === 'none') {
+    return { ...base, state: 'none', message: copy.none(STREAK_WINDOW_DAYS), items: [] };
+  }
+  // `available` with nothing in it is a contradiction, not an absence of streaks.
+  const first = patternFacts.items[0];
+  if (!first) return { ...base, state: 'unavailable', message: copy.unavailable, items: [] };
+
+  return {
+    state: 'available',
+    heading: (language === 'vi' ? PATTERN_FACT_VI[first.key]?.label : undefined) ?? first.subjectLabel,
+    source: copy.source,
+    message: null,
+    items: patternFacts.items.map((fact) => factLine(fact, language)),
+  };
 }

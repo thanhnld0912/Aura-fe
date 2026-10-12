@@ -4,7 +4,16 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AuthState } from '../auth/AuthProvider';
 import type { WeeklyStoryResult } from '../lib/api';
-import { insufficientWeek, readyStory, storyResult, sufficientWeek } from '../test/weekly';
+import {
+  earlierStreakFact,
+  insufficientWeek,
+  patternFacts,
+  rankedPattern,
+  readyStory,
+  storyResult,
+  streakFact,
+  sufficientWeek,
+} from '../test/weekly';
 import { InsightsView } from './InsightsView';
 
 /**
@@ -13,9 +22,14 @@ import { InsightsView } from './InsightsView';
  * word for word when it comes.
  */
 
+const profile = vi.hoisted(() => ({ locale: undefined as string | undefined }));
+
 vi.mock('../auth/AuthProvider', () => ({
   useAuth: (): AuthState =>
-    ({ status: 'signed-in', user: { id: 'user-1', timezone: 'Asia/Ho_Chi_Minh' } }) as unknown as AuthState,
+    ({
+      status: 'signed-in',
+      user: { id: 'user-1', timezone: 'Asia/Ho_Chi_Minh', locale: profile.locale },
+    }) as unknown as AuthState,
 }));
 
 vi.mock('../lib/supabase', () => ({
@@ -31,6 +45,7 @@ let answerReport: () => Promise<Response>;
 let answerStory: () => Promise<Response>;
 
 beforeEach(() => {
+  profile.locale = undefined;
   answerReport = async () => json(200, sufficientWeek());
   answerStory = async () => json(200, storyResult('ready'));
   vi.stubGlobal('fetch', fetchMock);
@@ -238,5 +253,168 @@ describe('InsightsView', () => {
     await screen.findByText('Sep 21 – Sep 27');
     await new Promise((resolve) => setTimeout(resolve, 30));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+  });
+});
+
+/**
+ * The logging streak is a counted fact: shown on its own, in the backend's numbers, never
+ * among the ranked patterns and never as something the story said.
+ */
+describe('InsightsView · logging consistency', () => {
+  const facts = (name = 'Logging consistency') => screen.findByRole('region', { name });
+  const weekWith = (patch: Partial<ReturnType<typeof sufficientWeek>>) => ({ ...sufficientWeek(), ...patch });
+
+  it('shows nothing of it while the week loads or when it fails to load', async () => {
+    answerReport = () => new Promise(() => {});
+    const loading = view();
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Logging consistency' })).not.toBeInTheDocument();
+    loading.unmount();
+
+    answerReport = async () => json(500, { error: { code: 'INTERNAL_ERROR', message: 'Down', requestId: '01FAIL' } });
+    view();
+    expect(await screen.findByText('Could not load your week.')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Logging consistency' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/in a row/)).not.toBeInTheDocument();
+  });
+
+  it('says unavailable is unavailable — not that there is no streak', async () => {
+    view();
+    const region = await facts();
+    expect(within(region).getByText('This information is not available right now.')).toBeInTheDocument();
+    expect(within(region).queryByText(/in a row/)).not.toBeInTheDocument();
+    expect(within(region).queryByText(/no run|no streak/i)).not.toBeInTheDocument();
+  });
+
+  it('treats a report without patternFacts as unavailable instead of breaking', async () => {
+    const { patternFacts: _omitted, ...older } = sufficientWeek();
+    answerReport = async () => json(200, older);
+    view();
+    expect(within(await facts()).getByText('This information is not available right now.')).toBeInTheDocument();
+    expect(within(card('Meals Logged')).getByText('5 logged')).toBeInTheDocument();
+  });
+
+  it('gives none a neutral empty state with no figure in it', async () => {
+    answerReport = async () => json(200, weekWith({ patternFacts: patternFacts('none') }));
+    view();
+    const region = await facts();
+    expect(within(region).getByText('No qualifying logging streak was found in the last 45 days.')).toBeInTheDocument();
+    // The only figure is the observation window: no run, no count of logged days.
+    expect(within(region).getAllByText(/\d/)).toHaveLength(1);
+    expect(within(region).queryByText(/in a row|Something was logged|This run/)).not.toBeInTheDocument();
+    expect(within(region).queryByText(/not available/)).not.toBeInTheDocument();
+    expect(within(region).queryByText(/this week|at least/i)).not.toBeInTheDocument();
+  });
+
+  it("shows a current run with the backend's dates, length, counts and caveat", async () => {
+    answerReport = async () => json(200, weekWith({ patternFacts: patternFacts('available') }));
+    view();
+    const region = await facts();
+    expect(within(region).getByText('12 days in a row')).toBeInTheDocument();
+    expect(within(region).getByText('Sep 12 – Sep 23 · Your longest run in the last 45 days')).toBeInTheDocument();
+    expect(within(region).getByText('This run is still going.')).toBeInTheDocument();
+    expect(within(region).getByText('Something was logged on 32 of the last 45 days.')).toBeInTheDocument();
+    expect(within(region).getByText(streakFact().caveat!)).toBeInTheDocument();
+    expect(within(region).getByText('Counted from your logs')).toBeInTheDocument();
+  });
+
+  it('shows an earlier longest run as ended, not as current', async () => {
+    answerReport = async () => json(200, weekWith({ patternFacts: patternFacts('available', earlierStreakFact()) }));
+    view();
+    const region = await facts();
+    expect(within(region).getByText('Aug 20 – Aug 31 · Your longest run in the last 45 days')).toBeInTheDocument();
+    expect(within(region).getByText('This run ended on Aug 31.')).toBeInTheDocument();
+    expect(within(region).queryByText('This run is still going.')).not.toBeInTheDocument();
+  });
+
+  it('stays in English for a Vietnamese profile, like the rest of the page', async () => {
+    profile.locale = 'vi';
+    answerReport = async () => json(200, weekWith({ patternFacts: patternFacts('available') }));
+    view();
+    const region = await facts('Logging consistency');
+    expect(within(region).getByText('12 days in a row')).toBeInTheDocument();
+    expect(within(region).getByText('Sep 12 – Sep 23 · Your longest run in the last 45 days')).toBeInTheDocument();
+    expect(within(region).getByText('This run is still going.')).toBeInTheDocument();
+    expect(within(region).getByText('Something was logged on 32 of the last 45 days.')).toBeInTheDocument();
+    expect(within(region).getByText(streakFact().caveat!)).toBeInTheDocument();
+    expect(within(region).getByText('Counted from your logs')).toBeInTheDocument();
+
+    expect(screen.queryByRole('region', { name: 'Tính đều đặn khi ghi nhận' })).not.toBeInTheDocument();
+    expect(within(region).queryByText(/ngày|thg|Chuỗi|Chỉ tính|nhật ký/)).not.toBeInTheDocument();
+  });
+
+  it.each(['unavailable', 'none'] as const)('keeps the %s state in English for a Vietnamese profile', async (status) => {
+    profile.locale = 'vi';
+    answerReport = async () => json(200, weekWith({ patternFacts: patternFacts(status) }));
+    view();
+    const region = await facts('Logging consistency');
+    expect(
+      within(region).getByText(
+        status === 'none'
+          ? 'No qualifying logging streak was found in the last 45 days.'
+          : 'This information is not available right now.',
+      ),
+    ).toBeInTheDocument();
+    expect(within(region).queryByText(/Thông tin|Không tìm thấy|nhật ký/)).not.toBeInTheDocument();
+  });
+
+  it('adds no caveat when the backend sent none', async () => {
+    answerReport = async () =>
+      json(200, weekWith({ patternFacts: patternFacts('available', streakFact({ caveat: null })) }));
+    view();
+    const region = await facts();
+    expect(within(region).getByText('12 days in a row')).toBeInTheDocument();
+    expect(within(region).queryByText(/This counts days|not what you did/)).not.toBeInTheDocument();
+  });
+
+  it('keeps the streak out of the ranked patterns, and the patterns out of the streak', async () => {
+    answerReport = async () =>
+      json(
+        200,
+        weekWith({
+          patterns: { status: 'available', items: [rankedPattern()] },
+          patternFacts: patternFacts('available'),
+        }),
+      );
+    view();
+    const region = await facts();
+    const ranked = screen.getByText('Patterns found').parentElement!;
+
+    expect(within(ranked).getAllByRole('listitem')).toHaveLength(1);
+    expect(within(ranked).getByText('Days with a walk · Good mood')).toBeInTheDocument();
+    expect(within(ranked).queryByText(/Logging consistency|in a row/)).not.toBeInTheDocument();
+    expect(ranked).not.toContainElement(region);
+
+    expect(within(region).queryByText(/Days with a walk|Good mood/)).not.toBeInTheDocument();
+    // No rank, score or strength is shown for a fact.
+    expect(within(region).queryByText(/#\d|rank|score|strength|%/i)).not.toBeInTheDocument();
+  });
+
+  it('stays outside the story, and is never sent to it or signed by AURA', async () => {
+    const report = weekWith({ patternFacts: patternFacts('available') });
+    answerReport = async () => json(200, report);
+    answerStory = async () => json(200, storyResult('ready', report));
+    view();
+    await userEvent.click(await screen.findByRole('button', { name: "Write my week's story" }));
+    await screen.findByText(readyStory().headline);
+
+    const story = screen.getByRole('article');
+    const region = await facts();
+    expect(story).not.toContainElement(region);
+    expect(within(story).queryByText(/in a row|Logging consistency/)).not.toBeInTheDocument();
+    expect(within(region).getByText('12 days in a row')).toBeInTheDocument();
+    expect(within(region).queryByText(/Written by AURA|Suggested by AURA/)).not.toBeInTheDocument();
+
+    const [, init] = storyCalls()[0]!;
+    expect((init as RequestInit).body).toBe('{}');
+  });
+
+  it('shows the streak state beside a week too thin for a story', async () => {
+    answerReport = async () => json(200, { ...insufficientWeek(), patternFacts: patternFacts('none') });
+    view();
+    expect(await screen.findByText('Not enough data yet')).toBeInTheDocument();
+    expect(
+      within(await facts()).getByText('No qualifying logging streak was found in the last 45 days.'),
+    ).toBeInTheDocument();
   });
 });

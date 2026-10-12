@@ -7,8 +7,10 @@ import {
   dayCells,
   formatWait,
   formatWeekRange,
+  patternFactsView,
   statCards,
   weekProgress,
+  type PatternFactsView,
 } from '../lib/insights';
 
 interface InsightsViewProps {
@@ -201,6 +203,8 @@ const WeekBody: React.FC<{
           </div>
         )}
 
+        <PatternFactsCard facts={patternFactsView(report.patternFacts)} />
+
         {/* Patterns the backend found, until a story narrates them with their caveats */}
         {!story && report.patterns.status === 'available' && report.patterns.items.length > 0 && (
           <div className="bg-white rounded-3xl p-5 border border-[#eee7e1] shadow-xs space-y-3">
@@ -257,6 +261,40 @@ const WeekBody: React.FC<{
     </>
   );
 };
+
+/**
+ * The logging streak: a count of logged days, shown on its own. It is not one of the
+ * ranked patterns and no story narrates it, so it stays here whether or not a story was
+ * written, with the backend's run and the backend's hedge. English, like the rest of the
+ * page (`PATTERN_FACTS_LANGUAGE`).
+ */
+const PatternFactsCard: React.FC<{ facts: PatternFactsView }> = ({ facts }) => (
+  <section
+    aria-label={facts.heading}
+    className="bg-white rounded-3xl p-5 border border-[#eee7e1] shadow-xs space-y-3"
+  >
+    <div className="flex items-start justify-between gap-3">
+      <h3 className="text-sm font-bold text-[#1e1b17]">{facts.heading}</h3>
+      <span className="text-[11px] font-semibold text-[#8a726a] flex-shrink-0">{facts.source}</span>
+    </div>
+    {facts.message && <p className="text-xs text-[#56423b]">{facts.message}</p>}
+    {facts.items.length > 0 && (
+      <ul className="space-y-3">
+        {facts.items.map((fact) => (
+          <li key={fact.id} className="space-y-1">
+            <p className="text-2xl font-black text-[#1e1b17]">{fact.runLength}</p>
+            <p className="text-xs font-semibold text-[#56423b]">
+              {fact.range} · {fact.scope}
+            </p>
+            <p className="text-xs text-[#56423b]">{fact.status}</p>
+            <p className="text-xs text-[#56423b]">{fact.observed}</p>
+            {fact.caveat && <p className="text-[11px] text-[#8a726a]">{fact.caveat}</p>}
+          </li>
+        ))}
+      </ul>
+    )}
+  </section>
+);
 
 /**
  * The cold start. The backend decided this week has too little logged to describe; the
