@@ -3515,6 +3515,32 @@ export interface paths {
                                     caveat: string;
                                 }[];
                             };
+                            patternFacts: {
+                                /** @enum {string} */
+                                status: "unavailable" | "none" | "available";
+                                items: {
+                                    id: string;
+                                    /** @enum {string} */
+                                    kind: "streak";
+                                    key: string;
+                                    subjectMetric: string;
+                                    subjectLabel: string;
+                                    strength: number;
+                                    sampleSize: number;
+                                    coverage: number;
+                                    windowStart: string;
+                                    windowEnd: string;
+                                    windowDays: number;
+                                    run: {
+                                        from: string;
+                                        to: string;
+                                        length: number;
+                                    };
+                                    current: boolean;
+                                    observedDays: number;
+                                    caveat: string | null;
+                                }[];
+                            };
                             dataQuality: {
                                 limitations: ("week_in_progress" | "insufficient_logging_coverage" | "no_meal_logs" | "meal_items_unresolved" | "no_activity_logs" | "no_plans" | "no_habit_logs" | "no_checkins" | "no_sleep_logs" | "pattern_engine_unavailable" | "previous_week_unavailable" | "previous_week_insufficient")[];
                             };
@@ -3741,6 +3767,32 @@ export interface paths {
                                         windowDays: number;
                                         coverage: number;
                                         caveat: string;
+                                    }[];
+                                };
+                                patternFacts: {
+                                    /** @enum {string} */
+                                    status: "unavailable" | "none" | "available";
+                                    items: {
+                                        id: string;
+                                        /** @enum {string} */
+                                        kind: "streak";
+                                        key: string;
+                                        subjectMetric: string;
+                                        subjectLabel: string;
+                                        strength: number;
+                                        sampleSize: number;
+                                        coverage: number;
+                                        windowStart: string;
+                                        windowEnd: string;
+                                        windowDays: number;
+                                        run: {
+                                            from: string;
+                                            to: string;
+                                            length: number;
+                                        };
+                                        current: boolean;
+                                        observedDays: number;
+                                        caveat: string | null;
                                     }[];
                                 };
                                 dataQuality: {

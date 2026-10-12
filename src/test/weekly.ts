@@ -76,6 +76,7 @@ export function sufficientWeek(): WeeklyReport {
       ],
     },
     patterns: { status: 'unavailable', items: [] },
+    patternFacts: { status: 'unavailable', items: [] },
     dataQuality: { limitations: ['week_in_progress', 'no_sleep_logs', 'pattern_engine_unavailable'] },
   };
 }
