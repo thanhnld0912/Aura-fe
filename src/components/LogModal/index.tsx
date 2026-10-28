@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import {
   ApiError,
   NetworkError,
@@ -12,28 +12,34 @@ import {
   type Food,
   type MealType,
 } from '../../lib/api';
-import { formatWait } from '../../lib/insights';
 import type { ActivityCategory } from '../../types';
+import { ActivityComposer } from './ActivityComposer';
+import { CATEGORIES } from './categories';
 import { DescribeMode } from './DescribeMode';
+import { ErrorAlert } from './ErrorAlert';
 import { MealReview } from './MealReview';
 import { PhotoMode } from './PhotoMode';
 import { ItemEditors, QuickAddMode, defaultUnitFor } from './QuickAddMode';
 import { QuickInspiration } from './QuickInspiration';
-import { initialState, isBusy, reducer, type Phase, type RequestError } from './state';
+import { initialState, isBusy, reducer, type Phase } from './state';
 import { toMealItemInput, type DraftItem } from './types';
 
 export interface LogModalProps {
   isOpen: boolean;
   onClose: () => void;
   /**
-   * Fired once a meal is actually logged, with the id the server assigned.
+   * Fired once something is actually logged, with the id the server assigned and the
+   * category it was logged under — a meal's id for food, the event's for the rest, the
+   * check-in's for a check-in.
    *
    * Replaces the old `onAddLogSuccess(MealLogDraft)`, which handed the parent a
    * fixture object carrying invented calories. The parent now reloads the day from
    * the API instead — the server is the only thing that knows what was saved.
    */
-  onSaved: (mealId: string) => void;
+  onSaved: (id: string, category: ActivityCategory) => void;
   initialPrompt?: string;
+  /** Which category the composer opens on. Food, unless the caller knows better. */
+  initialCategory?: ActivityCategory;
 }
 
 /**
@@ -58,38 +64,17 @@ export const LogModal: React.FC<LogModalProps> = (props) => {
 
 export default LogModal;
 
-/** Only `eat` has a backend path today. The rest are visible but inert (§16). */
-const CATEGORIES: ReadonlyArray<{ key: ActivityCategory; label: string; icon: string }> = [
-  { key: 'eat', label: 'I ate', icon: '🍱' },
-  { key: 'workout', label: 'I worked out', icon: '🏋️' },
-  { key: 'walk', label: 'I walked', icon: '🚶' },
-  { key: 'water', label: 'I drank water', icon: '💧' },
-  { key: 'sleep', label: 'I slept', icon: '😴' },
-  { key: 'check-in', label: 'Check-in', icon: '😊' },
-  { key: 'other', label: 'Something else', icon: '✍️' },
-];
-
 const SEARCH_DEBOUNCE_MS = 300;
 
-/**
- * The server's own wording wherever it is written for a person — which, for the photo
- * failures (413, 415), it is: "The image is larger than the upload limit" needs no
- * help. Only the rate limit is rewritten, because "try again later" is not useful
- * advice when the photo bucket is twenty a day and the server said exactly how long.
- */
-function describeFailure(error: RequestError): string {
-  if (error instanceof NetworkError) return error.message;
-  if (error.status === 429) {
-    const wait = formatWait(error.retryAfterSeconds);
-    return wait
-      ? `Too many requests. You can try again in about ${wait}.`
-      : 'Too many requests. Please try again later.';
-  }
-  return error.message;
-}
-
-const LogModalContent: React.FC<LogModalProps> = ({ onClose, onSaved, initialPrompt }) => {
+const LogModalContent: React.FC<LogModalProps> = ({ onClose, onSaved, initialPrompt, initialCategory }) => {
   const [state, dispatch] = useReducer(reducer, initialPrompt ?? '', initialState);
+  /**
+   * The category decides the whole form. Only food uses the reducer's meal state; the
+   * other categories each mount their own form, and share only the description
+   * (`state.text`) — which is shown, not saved, until the category on screen saves it.
+   */
+  const [category, setCategory] = useState<ActivityCategory>(initialCategory ?? 'eat');
+  const [activityBusy, setActivityBusy] = useState(false);
 
   /**
    * The item signature the current preview was calculated for.
@@ -268,7 +253,7 @@ const LogModalContent: React.FC<LogModalProps> = ({ onClose, onSaved, initialPro
       }
 
       dispatch({ type: 'saveOk', mealId: saved.id, meal: saved });
-      onSaved(saved.id);
+      onSaved(saved.id, 'eat');
       window.setTimeout(onClose, 900);
     } catch (error) {
       // Releasing the latch lets the person try again; the composer is still theirs.
@@ -294,6 +279,13 @@ const LogModalContent: React.FC<LogModalProps> = ({ onClose, onSaved, initialPro
   }, [state.draftMealId, state.draftsDirty, state.drafts, fail, claim, superseded]);
 
   const busy = isBusy(state.phase);
+  /**
+   * The selector is held still while a request that writes or reads a meal is in flight
+   * — a parse persists a draft, a calculation fills the review, a save logs the meal — so
+   * none of them lands under another category. A Quick Add search is not one: its answer
+   * only refills the suggestion list, so typing a food name does not lock the categories.
+   */
+  const categoryLocked = activityBusy || (busy && state.phase !== 'searching');
   const showReview = state.review !== null && state.phase !== 'searching';
 
   return (
@@ -332,216 +324,200 @@ const LogModalContent: React.FC<LogModalProps> = ({ onClose, onSaved, initialPro
             </button>
           </div>
 
-          {/* Activity Category Selector — only `eat` reaches a backend today. */}
-          <div className="flex items-center gap-2 overflow-x-auto py-4 no-scrollbar">
+          {/* Activity Category Selector — it decides the whole form below. Wraps rather
+              than scrolling sideways, so no category is ever off-screen. Held still while
+              a write is in flight (`categoryLocked`): a save belongs to the category that
+              started it. */}
+          <div role="group" aria-label="What are you logging?" className="flex flex-wrap items-center gap-2 py-4">
             {CATEGORIES.map((cat) => {
-              const isActive = cat.key === 'eat';
-              const available = cat.key === 'eat';
+              const isActive = cat.key === category;
               return (
                 <button
                   key={cat.key}
-                  disabled={!available}
-                  title={available ? undefined : 'Coming in a later phase'}
-                  className={`px-4 py-2 rounded-full text-sm font-semibold flex items-center gap-2 flex-shrink-0 transition-all ${
+                  aria-pressed={isActive}
+                  disabled={categoryLocked}
+                  onClick={() => setCategory(cat.key)}
+                  className={`px-4 py-2 rounded-full text-sm font-semibold flex items-center gap-2 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ff8a5b] focus-visible:ring-offset-2 disabled:cursor-not-allowed ${
                     isActive
                       ? 'bg-[#9f4118] text-white shadow-[0_8px_20px_-4px_rgba(255,138,91,0.4)]'
-                      : 'bg-[#faf2ec] text-[#56423b] opacity-40 cursor-not-allowed'
+                      : 'bg-[#faf2ec] text-[#56423b] enabled:hover:bg-[#f4ede6] enabled:hover:text-[#1e1b17] disabled:opacity-50'
                   }`}
                   type="button"
                 >
-                  <span className="text-base">{cat.icon}</span>
+                  <span className="text-base" aria-hidden="true">{cat.icon}</span>
                   <span>{cat.label}</span>
                 </button>
               );
             })}
           </div>
 
-          {/* 3 Giant Visual Modes Bar */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1 pb-6">
-            <button
-              onClick={() => dispatch({ type: 'setMode', mode: 'photo' })}
-              type="button"
-              className={`text-left rounded-2xl p-4 transition-all duration-300 flex items-center gap-3 border ${
-                state.mode === 'photo'
-                  ? 'bg-[#ffdbce]/40 border-[#ff8a5b] shadow-sm'
-                  : 'bg-[#faf2ec] hover:bg-[#f4ede6] border-transparent'
-              }`}
-            >
-              <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center text-[#9f4118] shadow-sm flex-shrink-0">
-                <span className="material-symbols-outlined text-[24px]">photo_camera</span>
-              </div>
-              <div className="min-w-0">
-                <div className="text-sm font-bold text-[#1e1b17]">Take a photo</div>
-                <p className="text-xs text-[#56423b] truncate">AURA reads the plate</p>
-              </div>
-            </button>
-
-            <button
-              onClick={() => dispatch({ type: 'setMode', mode: 'describe' })}
-              type="button"
-              className={`text-left rounded-2xl p-4 transition-all duration-300 flex items-center gap-3 border ${
-                state.mode === 'describe'
-                  ? 'bg-[#ffdbce]/60 border-[#ff8a5b]/60 shadow-[0_6px_20px_-6px_rgba(255,138,91,0.25)]'
-                  : 'bg-[#faf2ec] hover:bg-[#f4ede6] border-transparent'
-              }`}
-            >
-              <div className="w-11 h-11 rounded-full bg-[#9f4118] text-white flex items-center justify-center shadow-md flex-shrink-0">
-                <span className="material-symbols-outlined text-[24px]">edit_note</span>
-              </div>
-              <div className="min-w-0">
-                <div className="text-sm font-bold text-[#370e00] flex items-center gap-2">
-                  <span>Tell AURA</span>
-                  <span className="w-2 h-2 rounded-full bg-[#9f4118] animate-pulse" />
-                </div>
-                <p className="text-xs text-[#7f2b01] truncate">Just describe your meal</p>
-              </div>
-            </button>
-
-            <button
-              onClick={() => dispatch({ type: 'setMode', mode: 'quick' })}
-              type="button"
-              className={`text-left rounded-2xl p-4 transition-all duration-300 flex items-center gap-3 border ${
-                state.mode === 'quick'
-                  ? 'bg-[#adedd0]/50 border-[#2b6952] shadow-sm'
-                  : 'bg-[#faf2ec] hover:bg-[#f4ede6] border-transparent'
-              }`}
-            >
-              <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center text-[#2b6952] shadow-sm flex-shrink-0">
-                <span className="material-symbols-outlined text-[24px]">bolt</span>
-              </div>
-              <div className="min-w-0">
-                <div className="text-sm font-bold text-[#1e1b17]">Quick add</div>
-                <p className="text-xs text-[#56423b] truncate">Pick the main ingredients</p>
-              </div>
-            </button>
-          </div>
-
-          {/* Mode body */}
-          <div className="mb-6">
-            {state.mode === 'photo' && (
-              <PhotoMode
-                file={state.photoFile}
-                note={state.photoNote}
-                busy={busy}
-                analyzed={state.draftMealId !== null}
-                onPick={(file) => dispatch({ type: 'setPhoto', file })}
-                onNoteChange={(note) => dispatch({ type: 'setPhotoNote', note })}
-                onAnalyze={() => void handleAnalyze()}
-              />
-            )}
-
-            {state.mode === 'describe' && (
-              <DescribeMode
-                text={state.text}
-                mealType={state.mealType}
-                busy={busy}
-                onTextChange={(text) => dispatch({ type: 'setText', text })}
-                onMealTypeChange={(mealType: MealType) =>
-                  dispatch({ type: 'setMealType', mealType })
-                }
-                onParse={() => void handleParse()}
-              />
-            )}
-
-            {state.mode === 'quick' && (
-              <QuickAddMode
-                query={state.query}
-                results={state.results}
-                drafts={state.drafts}
-                searching={state.phase === 'searching'}
-                busy={busy}
-                onQueryChange={(value) => dispatch({ type: 'setQuery', query: value })}
-                onSelectFood={handleSelectFood}
-                onUpdateItem={(key, patch) => dispatch({ type: 'updateItem', key, patch })}
-                onRemoveItem={(key) => dispatch({ type: 'removeItem', key })}
-                onCalculate={() => void handleCalculate()}
-              />
-            )}
-          </div>
-
-          {/* Errors — inline, never a silent fallback to invented data. */}
-          {state.error && (
-            <div
-              role="alert"
-              className="mb-6 rounded-2xl border border-[#ffdad6] bg-[#ffdad6]/30 p-4 space-y-2"
-            >
-              <div className="flex items-start gap-2.5">
-                <span className="material-symbols-outlined text-[#93000a] text-[20px]">error</span>
-                <div className="min-w-0">
-                  <p className="text-sm font-bold text-[#93000a]">
-                    {describeFailure(state.error)}
-                  </p>
-                  {state.error instanceof ApiError && state.error.details && (
-                    <ul className="text-xs text-[#93000a]/90 mt-1 space-y-0.5">
-                      {state.error.details.map((detail) => (
-                        <li key={`${detail.path}-${detail.issue}`}>
-                          {detail.path}: {detail.issue}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {state.error instanceof ApiError && state.error.requestId && (
-                    <p className="text-[10px] text-[#93000a]/70 mt-1 font-mono break-all">
-                      Request {state.error.requestId}
-                    </p>
-                  )}
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => dispatch({ type: 'retry' })}
-                className="px-4 py-1.5 rounded-full bg-[#9f4118] text-white text-xs font-bold hover:bg-[#ff8a5b] transition-colors"
-              >
-                Back to editing
-              </button>
-            </div>
+          {category !== 'eat' && (
+            <ActivityComposer
+              key={category}
+              kind={category}
+              text={state.text}
+              onTextChange={(text) => dispatch({ type: 'setText', text })}
+              onSaved={(id) => onSaved(id, category)}
+              onClose={onClose}
+              onBusyChange={setActivityBusy}
+            />
           )}
 
-          {/* Review — only ever drawn from a server response. */}
-          {showReview && state.review && (
-            <div className="mb-8 space-y-4">
-              {/* Describe: the parsed amounts, editable. A correction goes back to
-                  PATCH /api/meals/:id, which re-resolves every figure server-side. */}
-              {state.draftMealId && state.drafts.length > 0 && (
-                <div className="space-y-3">
-                  <p className="text-xs font-semibold text-[#56423b]">
-                    Did AURA read the amounts right?
-                  </p>
-                  <ItemEditors
+          {category === 'eat' && (
+            <>
+              {/* 3 Giant Visual Modes Bar */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1 pb-6">
+                <button
+                  onClick={() => dispatch({ type: 'setMode', mode: 'photo' })}
+                  type="button"
+                  className={`text-left rounded-2xl p-4 transition-all duration-300 flex items-center gap-3 border ${
+                    state.mode === 'photo'
+                      ? 'bg-[#ffdbce]/40 border-[#ff8a5b] shadow-sm'
+                      : 'bg-[#faf2ec] hover:bg-[#f4ede6] border-transparent'
+                  }`}
+                >
+                  <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center text-[#9f4118] shadow-sm flex-shrink-0">
+                    <span className="material-symbols-outlined text-[24px]">photo_camera</span>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-bold text-[#1e1b17]">Take a photo</div>
+                    <p className="text-xs text-[#56423b] truncate">AURA reads the plate</p>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => dispatch({ type: 'setMode', mode: 'describe' })}
+                  type="button"
+                  className={`text-left rounded-2xl p-4 transition-all duration-300 flex items-center gap-3 border ${
+                    state.mode === 'describe'
+                      ? 'bg-[#ffdbce]/60 border-[#ff8a5b]/60 shadow-[0_6px_20px_-6px_rgba(255,138,91,0.25)]'
+                      : 'bg-[#faf2ec] hover:bg-[#f4ede6] border-transparent'
+                  }`}
+                >
+                  <div className="w-11 h-11 rounded-full bg-[#9f4118] text-white flex items-center justify-center shadow-md flex-shrink-0">
+                    <span className="material-symbols-outlined text-[24px]">edit_note</span>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-bold text-[#370e00] flex items-center gap-2">
+                      <span>Tell AURA</span>
+                      <span className="w-2 h-2 rounded-full bg-[#9f4118] animate-pulse" />
+                    </div>
+                    <p className="text-xs text-[#7f2b01] truncate">Just describe your meal</p>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => dispatch({ type: 'setMode', mode: 'quick' })}
+                  type="button"
+                  className={`text-left rounded-2xl p-4 transition-all duration-300 flex items-center gap-3 border ${
+                    state.mode === 'quick'
+                      ? 'bg-[#adedd0]/50 border-[#2b6952] shadow-sm'
+                      : 'bg-[#faf2ec] hover:bg-[#f4ede6] border-transparent'
+                  }`}
+                >
+                  <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center text-[#2b6952] shadow-sm flex-shrink-0">
+                    <span className="material-symbols-outlined text-[24px]">bolt</span>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-bold text-[#1e1b17]">Quick add</div>
+                    <p className="text-xs text-[#56423b] truncate">Pick the main ingredients</p>
+                  </div>
+                </button>
+              </div>
+
+              {/* Mode body */}
+              <div className="mb-6">
+                {state.mode === 'photo' && (
+                  <PhotoMode
+                    file={state.photoFile}
+                    note={state.photoNote}
+                    busy={busy}
+                    analyzed={state.draftMealId !== null}
+                    onPick={(file) => dispatch({ type: 'setPhoto', file })}
+                    onNoteChange={(note) => dispatch({ type: 'setPhotoNote', note })}
+                    onAnalyze={() => void handleAnalyze()}
+                  />
+                )}
+
+                {state.mode === 'describe' && (
+                  <DescribeMode
+                    text={state.text}
+                    mealType={state.mealType}
+                    busy={busy}
+                    onTextChange={(text) => dispatch({ type: 'setText', text })}
+                    onMealTypeChange={(mealType: MealType) =>
+                      dispatch({ type: 'setMealType', mealType })
+                    }
+                    onParse={() => void handleParse()}
+                  />
+                )}
+
+                {state.mode === 'quick' && (
+                  <QuickAddMode
+                    query={state.query}
+                    results={state.results}
                     drafts={state.drafts}
+                    searching={state.phase === 'searching'}
+                    busy={busy}
+                    onQueryChange={(value) => dispatch({ type: 'setQuery', query: value })}
+                    onSelectFood={handleSelectFood}
                     onUpdateItem={(key, patch) => dispatch({ type: 'updateItem', key, patch })}
                     onRemoveItem={(key) => dispatch({ type: 'removeItem', key })}
+                    onCalculate={() => void handleCalculate()}
                   />
-                  {state.draftsDirty && (
-                    <button
-                      type="button"
-                      onClick={() => void handleUpdateDraft()}
-                      disabled={busy}
-                      className="w-full py-2.5 px-6 rounded-full bg-[#2b6952] text-white font-bold text-xs hover:bg-[#306d56] disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-                    >
-                      Update amounts
-                    </button>
+                )}
+              </div>
+
+              {/* Errors — inline, never a silent fallback to invented data. */}
+              {state.error && <ErrorAlert error={state.error} onDismiss={() => dispatch({ type: 'retry' })} />}
+
+              {/* Review — only ever drawn from a server response. */}
+              {showReview && state.review && (
+                <div className="mb-8 space-y-4">
+                  {/* Describe: the parsed amounts, editable. A correction goes back to
+                      PATCH /api/meals/:id, which re-resolves every figure server-side. */}
+                  {state.draftMealId && state.drafts.length > 0 && (
+                    <div className="space-y-3">
+                      <p className="text-xs font-semibold text-[#56423b]">
+                        Did AURA read the amounts right?
+                      </p>
+                      <ItemEditors
+                        drafts={state.drafts}
+                        onUpdateItem={(key, patch) => dispatch({ type: 'updateItem', key, patch })}
+                        onRemoveItem={(key) => dispatch({ type: 'removeItem', key })}
+                      />
+                      {state.draftsDirty && (
+                        <button
+                          type="button"
+                          onClick={() => void handleUpdateDraft()}
+                          disabled={busy}
+                          className="w-full py-2.5 px-6 rounded-full bg-[#2b6952] text-white font-bold text-xs hover:bg-[#306d56] disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                        >
+                          Update amounts
+                        </button>
+                      )}
+                    </div>
                   )}
+
+                  <MealReview
+                    review={state.review}
+                    stale={state.reviewStale}
+                    saving={state.phase === 'saving'}
+                    saved={state.phase === 'saved'}
+                    onSave={() => void handleSave()}
+                    saveLabel="✓ Looks right — Add to today's timeline"
+                  />
                 </div>
               )}
 
-              <MealReview
-                review={state.review}
-                stale={state.reviewStale}
-                saving={state.phase === 'saving'}
-                saved={state.phase === 'saved'}
-                onSave={() => void handleSave()}
-                saveLabel="✓ Looks right — Add to today's timeline"
+              <QuickInspiration
+                onSearch={(value) => {
+                  dispatch({ type: 'setMode', mode: 'quick' });
+                  dispatch({ type: 'setQuery', query: value });
+                }}
               />
-            </div>
+            </>
           )}
-
-          <QuickInspiration
-            onSearch={(value) => {
-              dispatch({ type: 'setMode', mode: 'quick' });
-              dispatch({ type: 'setQuery', query: value });
-            }}
-          />
         </div>
       </div>
     </div>

@@ -119,6 +119,21 @@ export const EVENT_ICON: Record<EventType, string> = {
 };
 
 /**
+ * What an event recorded, as written: "40 min", "35 min · 2.5 km", "500 ml" — or `null`.
+ * Only the figures the logger stores (`metrics.ml` for water, `metrics.km` for a walk);
+ * anything else in `metrics` is not shown, because this code does not know its unit.
+ */
+export function eventMeasures(event: Pick<DayEvent, 'durationMin' | 'metrics'>): string | null {
+  const parts: string[] = [];
+  if (event.durationMin) parts.push(`${event.durationMin} min`);
+  const km = event.metrics?.['km'];
+  if (typeof km === 'number' && km > 0) parts.push(`${km} km`);
+  const ml = event.metrics?.['ml'];
+  if (typeof ml === 'number' && ml > 0) parts.push(`${ml} ml`);
+  return parts.length > 0 ? parts.join(' · ') : null;
+}
+
+/**
  * The day's non-meal events as one timeline section, oldest first, or `null` when there
  * are none. Meals are left out on purpose: `GET /api/meals/today` carries their
  * nutrition, and listing a meal twice would read as two meals.
@@ -139,7 +154,7 @@ export function eventsToSection(events: readonly DayEvent[], timeZone: string | 
       id: event.id,
       time: formatClock(new Date(event.occurredAt), timeZone),
       title: `${EVENT_ICON[event.type]} ${event.title}`,
-      description: event.durationMin ? `${event.durationMin} min` : '',
+      description: eventMeasures(event) ?? '',
       ...(event.note ? { note: { title: 'Note', content: event.note } } : {}),
     })),
   };

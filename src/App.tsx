@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { TabType, CrewMember, HighFiveFeedItem } from './types';
+import { TabType, CrewMember, HighFiveFeedItem, type ActivityCategory } from './types';
 import { INITIAL_CREW, INITIAL_FEED } from './data/initialData';
 import { Header } from './components/Header';
 import { BottomBar } from './components/BottomBar';
@@ -31,13 +31,18 @@ function SignedInApp() {
   const [crew, setCrew] = useState<CrewMember[]>(INITIAL_CREW);
   const [feed, setFeed] = useState<HighFiveFeedItem[]>(INITIAL_FEED);
 
-  const handleOpenLogModal = (prompt?: string) => {
+  const [logModalCategory, setLogModalCategory] = useState<ActivityCategory | undefined>(undefined);
+  /** Bumped when the composer saves a check-in, so the Today card re-reads it. */
+  const [checkinRevision, setCheckinRevision] = useState(0);
+
+  const handleOpenLogModal = (prompt?: string, category?: ActivityCategory) => {
     setLogModalInitialPrompt(prompt);
+    setLogModalCategory(category);
     setIsLogModalOpen(true);
   };
 
   /**
-   * A meal was logged. Ask the server what today looks like now.
+   * Something was logged. Ask the server what today looks like now.
    *
    * One reload per save, and no optimistic insert: the server assigned the id, the
    * event, the resolved grams and every nutrition figure, so a row invented here
@@ -49,11 +54,13 @@ function SignedInApp() {
    * backend behind it, so that post claimed something had been shared that had not.
    * Wiring the feed for real is a later task (`FOLLOW-UP`).
    */
-  const handleMealSaved = () => {
-    today.reload();
-    // A confirmed meal is a new event, and it may satisfy a planned meal: the server
-    // re-reconciles the plan, so both reads are stale now.
+  const handleSaved = (_id: string, category: ActivityCategory) => {
+    // Meals have their own read; nothing else changes it.
+    if (category === 'eat') today.reload();
+    // Every category is a new event, and it may satisfy a planned item: the server
+    // re-reconciles the plan, so the events and the comparison are stale now.
     plan.reload();
+    if (category === 'check-in') setCheckinRevision((n) => n + 1);
   };
 
   // Crew reactions
@@ -129,6 +136,7 @@ function SignedInApp() {
             onOpenLogModal={handleOpenLogModal}
             onSelectMood={setSelectedMood}
             selectedMood={selectedMood}
+            checkinRevision={checkinRevision}
           />
         )}
 
@@ -167,8 +175,9 @@ function SignedInApp() {
       <LogModal
         isOpen={isLogModalOpen}
         onClose={() => setIsLogModalOpen(false)}
-        onSaved={handleMealSaved}
+        onSaved={handleSaved}
         initialPrompt={logModalInitialPrompt}
+        initialCategory={logModalCategory}
       />
     </div>
   );
