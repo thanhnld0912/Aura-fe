@@ -1897,6 +1897,106 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/workouts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        workoutType: "gym" | "run" | "walk" | "yoga" | "sport" | "home" | "other";
+                        title?: string;
+                        /** Format: date-time */
+                        occurredAt?: string;
+                        durationMin?: number;
+                        perceivedEffort?: number;
+                        note?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** Format: uuid */
+                            id: string;
+                            /** Format: uuid */
+                            eventId: string;
+                            /** @enum {string} */
+                            workoutType: "gym" | "run" | "walk" | "yoga" | "sport" | "home" | "other";
+                            /** @enum {string} */
+                            status: "completed" | "partial" | "skipped";
+                            title: string;
+                            occurredAt: string;
+                            localDate: string;
+                            durationMin: number | null;
+                            perceivedEffort: number | null;
+                            note: string | null;
+                            createdAt: string;
+                        };
+                    };
+                };
+                /** @description Validation failed. `details` names the offending fields. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorEnvelope"];
+                    };
+                };
+                /** @description Missing, expired or invalid token. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorEnvelope"];
+                    };
+                };
+                /** @description Rate limit exceeded. Carries a `Retry-After` header. */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorEnvelope"];
+                    };
+                };
+                /** @description Unexpected failure. The cause is logged; quote `requestId` to find it. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorEnvelope"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/meals": {
         parameters: {
             query?: never;
