@@ -3603,6 +3603,184 @@
         }
       }
     },
+    "/api/workouts": {
+      "post": {
+        "tags": [
+          "Workouts"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "workoutType": {
+                    "type": "string",
+                    "enum": [
+                      "gym",
+                      "run",
+                      "walk",
+                      "yoga",
+                      "sport",
+                      "home",
+                      "other"
+                    ]
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "occurredAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "durationMin": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 600
+                  },
+                  "perceivedEffort": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 5
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "workoutType"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "eventId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "workoutType": {
+                      "type": "string",
+                      "enum": [
+                        "gym",
+                        "run",
+                        "walk",
+                        "yoga",
+                        "sport",
+                        "home",
+                        "other"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "completed",
+                        "partial",
+                        "skipped"
+                      ]
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "occurredAt": {
+                      "type": "string"
+                    },
+                    "localDate": {
+                      "type": "string"
+                    },
+                    "durationMin": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "perceivedEffort": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "note": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "eventId",
+                    "workoutType",
+                    "status",
+                    "title",
+                    "occurredAt",
+                    "localDate",
+                    "durationMin",
+                    "perceivedEffort",
+                    "note",
+                    "createdAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed. `details` names the offending fields.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or invalid token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded. Carries a `Retry-After` header.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected failure. The cause is logged; quote `requestId` to find it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/meals": {
       "post": {
         "tags": [
@@ -9278,6 +9456,10 @@
     {
       "name": "Check-ins",
       "description": "Mood and note, one per local day."
+    },
+    {
+      "name": "Workouts",
+      "description": "Completed workout sessions, each with its timeline event."
     },
     {
       "name": "Meals",
