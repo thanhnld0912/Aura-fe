@@ -8,6 +8,7 @@ import {
   type Checkin,
   type CheckinInput,
 } from '../lib/api';
+import { SubmissionKey } from '../lib/idempotency';
 import type { Loadable } from './useTodayPlan';
 
 /**
@@ -34,6 +35,11 @@ export interface CheckinState {
   lastSaved: Checkin | null;
   /** Resolves to the saved check-in, or `null` if it failed or a save was already running. */
   save: (input: CheckinInput) => Promise<Checkin | null>;
+  /**
+   * Reads the recent check-ins again, for when today's was saved somewhere else — the
+   * composer's check-in. Forgets `lastSaved`, which that save has superseded.
+   */
+  reload: () => void;
 }
 
 function asKnownError(error: unknown): ApiError | NetworkError {
@@ -46,23 +52,26 @@ export function useCheckin(options: { onSaved?: () => void } = {}): CheckinState
   const identity = authStatus === 'signed-in' ? (user?.id ?? null) : null;
 
   const [recent, setRecent] = useState<Loadable<Checkin[]>>({ status: 'loading', data: [], error: null });
+  /** Bumped by `reload`, which is the only thing that re-runs a settled read. */
+  const [attempt, setAttempt] = useState(0);
   const issued = useRef<string | null>(null);
 
   useEffect(() => {
     if (!identity) return;
-    if (issued.current === identity) return;
-    issued.current = identity;
+    const key = `${identity}#${attempt}`;
+    if (issued.current === key) return;
+    issued.current = key;
 
     setRecent({ status: 'loading', data: [], error: null });
     void (async () => {
       try {
         const data = await fetchRecentCheckins();
-        if (issued.current === identity) setRecent({ status: 'success', data, error: null });
+        if (issued.current === key) setRecent({ status: 'success', data, error: null });
       } catch (error) {
-        if (issued.current === identity) setRecent({ status: 'error', data: [], error: asKnownError(error) });
+        if (issued.current === key) setRecent({ status: 'error', data: [], error: asKnownError(error) });
       }
     })();
-  }, [identity]);
+  }, [identity, attempt]);
 
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [saveError, setSaveError] = useState<ApiError | NetworkError | null>(null);
@@ -70,6 +79,8 @@ export function useCheckin(options: { onSaved?: () => void } = {}): CheckinState
 
   /** Written synchronously, so a second tap in the same frame already sees it. */
   const inFlight = useRef(false);
+  /** "Try again" with an unchanged form resends the same `Idempotency-Key`. */
+  const submission = useRef(new SubmissionKey());
   const onSaved = useRef(options.onSaved);
   onSaved.current = options.onSaved;
 
@@ -80,7 +91,8 @@ export function useCheckin(options: { onSaved?: () => void } = {}): CheckinState
     setSaveError(null);
 
     try {
-      const saved = await saveCheckin(input);
+      const saved = await saveCheckin(input, { idempotencyKey: submission.current.for(input) });
+      submission.current.done();
       setLastSaved(saved);
       setSaveStatus('saved');
       // The day changed on the server — a check-in event was created or moved — so
@@ -96,5 +108,11 @@ export function useCheckin(options: { onSaved?: () => void } = {}): CheckinState
     }
   }, []);
 
-  return { recent, saveStatus, saveError, lastSaved, save };
+  const reload = useCallback(() => {
+    setLastSaved(null);
+    setSaveStatus('idle');
+    setAttempt((n) => n + 1);
+  }, []);
+
+  return { recent, saveStatus, saveError, lastSaved, save, reload };
 }

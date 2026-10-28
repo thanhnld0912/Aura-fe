@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DayEvent, PlanComparison, PlanComparisonItem } from './api';
 import {
+  eventMeasures,
   eventsToSection,
   formatClock,
   formatDayHeading,
@@ -103,6 +104,17 @@ describe('pickSpotlight', () => {
   it('shows nothing without a plan, or with an empty one', () => {
     expect(pickSpotlight(null)).toBeNull();
     expect(pickSpotlight(comparison([]))).toBeNull();
+  });
+});
+
+describe('eventMeasures', () => {
+  it('shows what the logger stored, and nothing it did not', () => {
+    expect(eventMeasures({ durationMin: 35, metrics: { km: 2.5 } })).toBe('35 min · 2.5 km');
+    expect(eventMeasures({ durationMin: null, metrics: { ml: 500 } })).toBe('500 ml');
+    expect(eventMeasures({ durationMin: 40, metrics: null })).toBe('40 min');
+    expect(eventMeasures({ durationMin: null, metrics: null })).toBeNull();
+    // A key with no known unit is not guessed at.
+    expect(eventMeasures({ durationMin: null, metrics: { steps: 4000 } })).toBeNull();
   });
 });
 

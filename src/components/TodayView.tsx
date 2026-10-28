@@ -22,6 +22,7 @@ import {
 } from '../lib/today';
 import type { TodayMealsState } from '../hooks/useTodayMeals';
 import type { TodayPlanState } from '../hooks/useTodayPlan';
+import type { ActivityCategory } from '../types';
 
 /**
  * The request id, when the failure came back from the server rather than from a dead
@@ -43,9 +44,11 @@ interface TodayViewProps {
   today: TodayMealsState;
   /** The plan comparison and the day's other events, from the API. */
   plan: TodayPlanState;
-  onOpenLogModal: (initialPrompt?: string) => void;
+  onOpenLogModal: (initialPrompt?: string, category?: ActivityCategory) => void;
   onSelectMood: (mood: string) => void;
   selectedMood: string;
+  /** Bumped when the composer saves today's check-in, so this card reads it again. */
+  checkinRevision?: number;
 }
 
 export const TodayView: React.FC<TodayViewProps> = ({
@@ -54,6 +57,7 @@ export const TodayView: React.FC<TodayViewProps> = ({
   onOpenLogModal,
   onSelectMood,
   selectedMood,
+  checkinRevision = 0,
 }) => {
   const { user } = useAuth();
   const timeZone = user?.timezone ?? undefined;
@@ -93,7 +97,13 @@ export const TodayView: React.FC<TodayViewProps> = ({
   const savedForm = savedCheckin ? formFromCheckin(savedCheckin) : null;
 
   const form: CheckinForm | null = isMood(selectedMood)
-    ? { mood: selectedMood, dayTag: selectedTag, note: checkInNote }
+    ? {
+        mood: selectedMood,
+        dayTag: selectedTag,
+        note: checkInNote,
+        // The card has no energy control; what was saved goes back unchanged.
+        ...(savedForm?.energy1to5 != null ? { energy1to5: savedForm.energy1to5 } : {}),
+      }
     : null;
   const dirty = !savedForm || !form || !sameForm(form, savedForm);
   const saving = checkin.saveStatus === 'saving';
@@ -113,6 +123,18 @@ export const TodayView: React.FC<TodayViewProps> = ({
     setSelectedTag(saved.dayTag);
     setCheckInNote(saved.note);
   }, [fromServer, onSelectMood]);
+
+  // The composer saved today's check-in: what this card holds is out of date. Read it
+  // again and show the new answer — that save is newer than anything typed here.
+  const seenRevision = useRef(checkinRevision);
+  const reloadCheckin = checkin.reload;
+  useEffect(() => {
+    if (seenRevision.current === checkinRevision) return;
+    seenRevision.current = checkinRevision;
+    touched.current = false;
+    prefilled.current = false;
+    reloadCheckin();
+  }, [checkinRevision, reloadCheckin]);
 
   const handleSaveCheckin = async () => {
     if (!form || saving) return;
@@ -653,22 +675,24 @@ export const TodayView: React.FC<TodayViewProps> = ({
           >
             🍱 Ate
           </button>
+          {/* The activity chips open their own form, empty: a ready-made sentence there
+              would be one press away from logging something that did not happen. */}
           <button
-            onClick={() => onOpenLogModal('Vừa hoàn thành 30 phút đi bộ nhẹ nhàng.')}
+            onClick={() => onOpenLogModal(undefined, 'workout')}
             className="px-3.5 py-1.5 rounded-full bg-white hover:bg-[#faf2ec] text-xs font-semibold text-[#1e1b17] shadow-xs border border-[#eee7e1]"
             type="button"
           >
             🏋️ Workout
           </button>
           <button
-            onClick={() => onOpenLogModal('Đã uống 1 ly nước ấm 350ml.')}
+            onClick={() => onOpenLogModal(undefined, 'water')}
             className="px-3.5 py-1.5 rounded-full bg-white hover:bg-[#faf2ec] text-xs font-semibold text-[#1e1b17] shadow-xs border border-[#eee7e1]"
             type="button"
           >
             💧 Water
           </button>
           <button
-            onClick={() => onOpenLogModal('Chuẩn bị đi ngủ lúc 22:30.')}
+            onClick={() => onOpenLogModal(undefined, 'sleep')}
             className="px-3.5 py-1.5 rounded-full bg-white hover:bg-[#faf2ec] text-xs font-semibold text-[#1e1b17] shadow-xs border border-[#eee7e1]"
             type="button"
           >

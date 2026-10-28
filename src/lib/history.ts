@@ -1,5 +1,5 @@
 import type { HistoryEvent } from './api';
-import { EVENT_ICON, formatClock } from './today';
+import { EVENT_ICON, eventMeasures, formatClock } from './today';
 
 /**
  * History pages → what `HistoryView` renders.
@@ -31,7 +31,7 @@ export interface HistoryEntry {
   time: string;
   /** Icon and the event's own title. */
   title: string;
-  /** "40 min", or `null` when the event has no duration. */
+  /** What was recorded — "40 min", "250 ml" (`eventMeasures`) — or `null` when nothing was. */
   duration: string | null;
   note: string | null;
 }
@@ -72,7 +72,7 @@ export function groupByDay(events: readonly HistoryEvent[], timeZone: string | u
       id: event.id,
       time: formatClock(new Date(event.occurredAt), timeZone),
       title: `${EVENT_ICON[event.type]} ${event.title}`,
-      duration: event.durationMin ? `${event.durationMin} min` : null,
+      duration: eventMeasures(event),
       note: event.note,
     });
   }

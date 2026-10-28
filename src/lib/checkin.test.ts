@@ -33,12 +33,18 @@ describe('toCheckinInput', () => {
     expect(input).toEqual({ mood: 'low' });
     expect(Object.values(input)).not.toContain(null);
   });
+
+  it('carries an energy rating through when the form has one', () => {
+    expect(toCheckinInput({ mood: 'okay', dayTag: null, note: '', energy1to5: 4 })).toEqual({ mood: 'okay', energy1to5: 4 });
+    expect(toCheckinInput({ mood: 'okay', dayTag: null, note: '', energy1to5: null })).toEqual({ mood: 'okay' });
+  });
 });
 
 describe('formFromCheckin and sameForm', () => {
   it('round-trips a saved check-in into the form', () => {
     expect(formFromCheckin(saved())).toEqual({ mood: 'good', dayTag: 'busy', note: 'long day' });
     expect(formFromCheckin(saved({ note: null, dayTag: null }))).toEqual({ mood: 'good', dayTag: null, note: '' });
+    expect(formFromCheckin(saved({ energy1to5: 2 }))).toEqual({ mood: 'good', dayTag: 'busy', note: 'long day', energy1to5: 2 });
   });
 
   it('treats a blank note as no note, and any other change as a change', () => {

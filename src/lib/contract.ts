@@ -150,6 +150,22 @@ export type PlanComparison = Response<'/api/daily-plan/comparison', 'get', 200>;
 export type PlanComparisonItem = PlanComparison['items'][number];
 export type Adherence = PlanComparisonItem['adherence'];
 
+/**
+ * A walk, water, sleep or anything else, as `POST /api/events` takes it. Meals, workouts
+ * and check-ins are refused there: each has its own endpoint, which writes the detail
+ * row alongside the event.
+ */
+export type CreateEventInput = Body<'/api/events', 'post'>;
+export type GenericEventType = CreateEventInput['type'];
+export type CreatedEvent = Response<'/api/events', 'post', 201>;
+
+// ── Workouts ───────────────────────────────────────────────────────────────────
+
+/** A completed workout: the session, and the timeline event written with it. */
+export type Workout = Response<'/api/workouts', 'post', 201>;
+export type CreateWorkoutInput = Body<'/api/workouts', 'post'>;
+export type WorkoutType = CreateWorkoutInput['workoutType'];
+
 // ── Check-ins ──────────────────────────────────────────────────────────────────
 
 /**
@@ -264,15 +280,18 @@ type Exact<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
 
 export const MOODS = ['low', 'okay', 'good', 'great'] as const;
 export const DAY_TAGS = ['normal', 'busy', 'better_than_expected', 'not_as_planned'] as const;
+export const WORKOUT_TYPES = ['gym', 'run', 'walk', 'yoga', 'sport', 'home', 'other'] as const;
 
 // Referenced by the assertions below; `void` keeps them from being unused exports.
 type UnitsMatch = Exact<(typeof MEAL_UNITS)[number], MealUnit>;
 type SizesMatch = Exact<(typeof SIZE_LABELS)[number], SizeLabel>;
 type MoodsMatch = Exact<(typeof MOODS)[number], Mood>;
 type DayTagsMatch = Exact<(typeof DAY_TAGS)[number], DayTag>;
+type WorkoutTypesMatch = Exact<(typeof WORKOUT_TYPES)[number], WorkoutType>;
 
 /** Compile-time only: a drifted enum makes one of these `never` and the build fails. */
-export const CONTRACT_ENUMS_MATCH: [UnitsMatch, SizesMatch, MoodsMatch, DayTagsMatch] = [
+export const CONTRACT_ENUMS_MATCH: [UnitsMatch, SizesMatch, MoodsMatch, DayTagsMatch, WorkoutTypesMatch] = [
+  true,
   true,
   true,
   true,

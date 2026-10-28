@@ -21,6 +21,11 @@ export interface CheckinForm {
   /** `null` only when a check-in saved elsewhere carried no tag; this form always sets one. */
   dayTag: DayTag | null;
   note: string;
+  /**
+   * Not on the Today card — set from the composer's check-in — but carried through it,
+   * so that saving the card does not clear an energy rating it never showed.
+   */
+  energy1to5?: number | null;
 }
 
 export function isMood(value: string): value is Mood {
@@ -37,11 +42,17 @@ export function toCheckinInput(form: CheckinForm): CheckinInput {
     mood: form.mood,
     ...(form.dayTag ? { dayTag: form.dayTag } : {}),
     ...(form.note.trim().length > 0 ? { note: form.note } : {}),
+    ...(form.energy1to5 != null ? { energy1to5: form.energy1to5 } : {}),
   };
 }
 
 export function formFromCheckin(checkin: Checkin): CheckinForm {
-  return { mood: checkin.mood, dayTag: checkin.dayTag ?? null, note: checkin.note ?? '' };
+  return {
+    mood: checkin.mood,
+    dayTag: checkin.dayTag ?? null,
+    note: checkin.note ?? '',
+    ...(checkin.energy1to5 != null ? { energy1to5: checkin.energy1to5 } : {}),
+  };
 }
 
 /** Whether the form says the same thing as what was saved. A blank note is no note. */

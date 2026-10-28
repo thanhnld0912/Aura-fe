@@ -6,7 +6,10 @@ import type {
   CalculationResult,
   Checkin,
   CheckinInput,
+  CreatedEvent,
+  CreateEventInput,
   CreateMealInput,
+  CreateWorkoutInput,
   DayEvent,
   ErrorDetail,
   ErrorEnvelope,
@@ -20,6 +23,7 @@ import type {
   SessionResponse,
   WeeklyReport,
   WeeklyStoryResult,
+  Workout,
 } from './contract';
 import { getAccessToken } from './supabase';
 
@@ -124,6 +128,9 @@ export type {
   CalculatedItem,
   Checkin,
   CheckinInput,
+  CreatedEvent,
+  CreateEventInput,
+  CreateWorkoutInput,
   DayEvent,
   DayTag,
   Mood,
@@ -140,6 +147,7 @@ export type {
   ErrorEnvelope,
   Food,
   FoodPortion,
+  GenericEventType,
   Meal,
   MealItem,
   MealItemInput,
@@ -158,8 +166,10 @@ export type {
   WeeklyReport,
   WeeklyStory,
   WeeklyStoryResult,
+  Workout,
+  WorkoutType,
 } from './contract';
-export { DAY_TAGS, MEAL_UNITS, MOODS, SIZE_LABELS } from './contract';
+export { DAY_TAGS, MEAL_UNITS, MOODS, SIZE_LABELS, WORKOUT_TYPES } from './contract';
 
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
@@ -168,10 +178,12 @@ export interface RequestOptions {
   /** The bootstrap call sends its token in the body and needs no header. */
   authenticated?: boolean;
   signal?: AbortSignal;
+  /** Sent as `Idempotency-Key`, which CORS already allows. */
+  idempotencyKey?: string;
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, authenticated = true, signal } = options;
+  const { method = 'GET', body, authenticated = true, signal, idempotencyKey } = options;
 
   /**
    * The one endpoint that takes a file sends `multipart/form-data`.
@@ -185,6 +197,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
   const headers: Record<string, string> = { 'X-AURA-Version': '1' };
   if (body !== undefined && !isMultipart) headers['Content-Type'] = 'application/json';
+  if (idempotencyKey !== undefined) headers['Idempotency-Key'] = idempotencyKey;
 
   if (authenticated) {
     const token = await getAccessToken();
@@ -320,6 +333,30 @@ export async function fetchPlanComparison(): Promise<PlanComparison | null> {
   }
 }
 
+/** For the writes that take an `Idempotency-Key` (API_DESIGN.md §1, `lib/idempotency.ts`). */
+export interface WriteOptions {
+  /**
+   * The same key for every attempt at one action. Without one a second call is a second
+   * record, so a caller that retries must pass one.
+   */
+  idempotencyKey?: string;
+}
+
+/**
+ * Logs a walk, water, sleep or anything else. No `occurredAt` means "now" on the server;
+ * which local day the event lands on is always the server's answer.
+ */
+export async function createEvent(input: CreateEventInput, options: WriteOptions = {}): Promise<CreatedEvent> {
+  return apiRequest<CreatedEvent>('/events', { method: 'POST', body: input, ...options });
+}
+
+// ── Workouts ───────────────────────────────────────────────────────────────────
+
+/** Logs a completed workout: the server writes the session and its event together. */
+export async function createWorkout(input: CreateWorkoutInput, options: WriteOptions = {}): Promise<Workout> {
+  return apiRequest<Workout>('/workouts', { method: 'POST', body: input, ...options });
+}
+
 // ── Check-ins ──────────────────────────────────────────────────────────────────
 
 /**
@@ -330,8 +367,8 @@ export async function fetchPlanComparison(): Promise<PlanComparison | null> {
  * Send the whole form every time. A field left out is not "unchanged" to the server; it
  * is cleared.
  */
-export async function saveCheckin(input: CheckinInput): Promise<Checkin> {
-  return apiRequest<Checkin>('/checkins', { method: 'POST', body: input });
+export async function saveCheckin(input: CheckinInput, options: WriteOptions = {}): Promise<Checkin> {
+  return apiRequest<Checkin>('/checkins', { method: 'POST', body: input, ...options });
 }
 
 /** Recent check-ins — the server's default window, the last 30 days up to today. */

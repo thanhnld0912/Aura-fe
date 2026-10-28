@@ -67,15 +67,30 @@ const meals: TodayMealsState = { status: 'success', sections: [], error: null, r
 const ok = <T,>(data: T): Loadable<T> => ({ status: 'success', data, error: null });
 
 /** Holds the mood the way `App` does — the card is controlled from above. */
-const Harness: React.FC<{ reload: () => void; events?: DayEvent[] }> = ({ reload, events = [] }) => {
+const Harness: React.FC<{ reload: () => void; events?: DayEvent[]; checkinRevision?: number }> = ({
+  reload,
+  events = [],
+  checkinRevision,
+}) => {
   const [mood, setMood] = useState('good');
   const plan: TodayPlanState = {
     plan: ok<PlanComparison | null>(null),
     events: ok<DayEvent[]>(events),
     reload,
   };
-  return <TodayView today={meals} plan={plan} onOpenLogModal={vi.fn()} onSelectMood={setMood} selectedMood={mood} />;
+  return (
+    <TodayView
+      today={meals}
+      plan={plan}
+      onOpenLogModal={vi.fn()}
+      onSelectMood={setMood}
+      selectedMood={mood}
+      {...(checkinRevision !== undefined ? { checkinRevision } : {})}
+    />
+  );
 };
+
+const todaysCheckinEvent = { id: 'ev-checkin', type: 'checkin', title: 'Check-in', occurredAt: '2026-09-18T01:00:00.000Z' } as DayEvent;
 
 const saveButton = () => screen.getByRole('button', { name: /Save check-in|Try again|Saving…/ });
 const status = () => screen.getByRole('status');
@@ -156,6 +171,10 @@ describe('Check-in card', () => {
     await waitFor(() => expect(status()).toHaveTextContent('Saved'));
     expect(posts()).toHaveLength(2);
     expect(lastBody()).toEqual({ mood: 'great', dayTag: 'busy', note: 'keep me' });
+    // "Try again" is the same action, so the server can tell it from a second check-in.
+    const keys = posts().map(([, init]) => ((init as RequestInit).headers as Record<string, string>)['Idempotency-Key']);
+    expect(keys[0]).toMatch(/^[0-9a-f-]{36}$/);
+    expect(keys[1]).toBe(keys[0]);
   });
 
   it("shows today's saved check-in as saved, so a reload cannot erase its note", async () => {
@@ -173,6 +192,31 @@ describe('Check-in card', () => {
     await userEvent.click(saveButton());
     await waitFor(() => expect(status()).toHaveTextContent('Saved'));
     expect(lastBody()).toEqual({ mood: 'okay', dayTag: 'busy', note: 'from this morning' });
+  });
+
+  it('sends back an energy rating it has no control for, rather than clearing it', async () => {
+    history = [savedCheckin({ mood: 'low', dayTag: 'busy', energy1to5: 2 })];
+    render(<Harness reload={vi.fn()} events={[todaysCheckinEvent]} />);
+    await waitFor(() => expect(status()).toHaveTextContent('Saved'));
+
+    await userEvent.click(screen.getByRole('button', { name: /Okay/ }));
+    await userEvent.click(saveButton());
+    await waitFor(() => expect(status()).toHaveTextContent('Saved'));
+    expect(lastBody()).toEqual({ mood: 'okay', dayTag: 'busy', energy1to5: 2 });
+  });
+
+  it('reads today’s check-in again when the composer saved one', async () => {
+    history = [savedCheckin({ mood: 'low', dayTag: 'busy' })];
+    const { rerender } = render(<Harness reload={vi.fn()} events={[todaysCheckinEvent]} checkinRevision={0} />);
+    await waitFor(() => expect(screen.getByRole('button', { name: /Low energy/ })).toHaveAttribute('aria-pressed', 'true'));
+
+    history = [savedCheckin({ mood: 'great', dayTag: 'better_than_expected' })];
+    rerender(<Harness reload={vi.fn()} events={[todaysCheckinEvent]} checkinRevision={1} />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /Great/ })).toHaveAttribute('aria-pressed', 'true'));
+    expect(screen.getByRole('button', { name: 'Better than expected' })).toHaveAttribute('aria-pressed', 'true');
+    expect(status()).toHaveTextContent('Saved');
+    expect(posts()).toHaveLength(0);
   });
 
   it("ignores a check-in from another day", async () => {

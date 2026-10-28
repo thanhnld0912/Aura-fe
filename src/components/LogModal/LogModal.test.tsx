@@ -393,7 +393,7 @@ describe('Quick Add', () => {
     await userEvent.click(screen.getByRole('button', { name: /Looks right/ }));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
-    expect(onSaved).toHaveBeenCalledWith('meal-123');
+    expect(onSaved).toHaveBeenCalledWith('meal-123', 'eat');
   });
 
   it('shows a validation error inline, field by field', async () => {
@@ -653,12 +653,34 @@ describe('safety and regressions', () => {
     }
   });
 
-  it('disables every category that has no backend behind it', async () => {
+  it('opens on food, with every category available', async () => {
     open();
-    for (const label of ['I worked out', 'I walked', 'I drank water', 'I slept', 'Check-in']) {
-      expect(screen.getByRole('button', { name: new RegExp(label) })).toBeDisabled();
+    for (const label of ['I ate', 'I worked out', 'I walked', 'I drank water', 'I slept', 'Check-in', 'Something else']) {
+      expect(screen.getByRole('button', { name: new RegExp(label) })).toBeEnabled();
     }
-    expect(screen.getByRole('button', { name: /I ate/ })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /I ate/ })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('leaves the categories usable while a Quick Add search is still running', async () => {
+    // A search that never answers: the phase stays `searching`.
+    fetchMock.mockImplementation(() => new Promise<Response>(() => {}));
+    open();
+    await userEvent.click(screen.getByRole('button', { name: /Quick add/ }));
+    await searchFor('cơm');
+
+    expect(screen.getByRole('button', { name: /I walked/ })).toBeEnabled();
+    await userEvent.click(screen.getByRole('button', { name: /I walked/ }));
+    expect(screen.getByRole('button', { name: /Save walk/ })).toBeInTheDocument();
+    // Nothing was written by switching.
+    expect(fetchMock.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === 'POST')).toEqual([]);
+  });
+
+  it('still holds the categories while a meal is being read', async () => {
+    fetchMock.mockImplementation(() => new Promise<Response>(() => {}));
+    open();
+    await userEvent.type(screen.getByLabelText('Describe your meal'), 'cơm tấm');
+    await userEvent.click(screen.getByRole('button', { name: /Let AURA read it/ }));
+    expect(screen.getByRole('button', { name: /I walked/ })).toBeDisabled();
   });
 
   it('renders nothing at all when closed', () => {
@@ -895,7 +917,7 @@ describe('Photo', () => {
     expect(
       callsTo('/meals/meal-photo-1').filter(([, init]) => init.method === 'PATCH'),
     ).toHaveLength(0);
-    expect(onSaved).toHaveBeenCalledWith('meal-photo-1');
+    expect(onSaved).toHaveBeenCalledWith('meal-photo-1', 'eat');
   });
 
   it('discards the previous draft when a different photo is chosen', async () => {
