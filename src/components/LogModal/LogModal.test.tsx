@@ -1043,3 +1043,159 @@ describe('ConfidenceBadge', () => {
     expect(screen.getByText('portion row "1 bowl" → 150 g')).toBeInTheDocument();
   });
 });
+
+describe('regression: what was read, and a meal that never reached History', () => {
+  const EGG_ITEM = {
+    id: 'item-egg',
+    foodId: '7b0d3a8e-0c55-4c39-9f43-2f0a8c1d0e11',
+    detectedName: 'trứng',
+    displayNameVi: 'Trứng luộc',
+    displayNameEn: 'Boiled egg',
+    quantity: 1,
+    unit: 'piece',
+    gramsResolved: 50,
+    portionLabel: 'medium',
+    nutrition: { kcal: 78, proteinG: 6.3, carbsG: 0.6, fatG: 5.3, fiberG: 0 },
+    source: 'local',
+    confidence: 0.6,
+    confidenceBand: 'estimate',
+    userConfirmed: false,
+  };
+  const MILK_ITEM = {
+    id: 'item-milk',
+    foodId: null,
+    detectedName: 'sữa ít đường',
+    displayNameVi: null,
+    displayNameEn: null,
+    quantity: 1,
+    unit: 'piece',
+    gramsResolved: null,
+    portionLabel: null,
+    nutrition: { kcal: null, proteinG: null, carbsG: null, fatG: null, fiberG: null },
+    source: 'unresolved',
+    confidence: 0,
+    confidenceBand: 'unresolved',
+    userConfirmed: false,
+  };
+  const text = 'tôi ăn 1 quả trứng và uống 1 hộp sữa ít đường';
+  const draft = () => ({
+    meal: savedMeal({
+      id: 'draft-egg',
+      status: 'draft',
+      eventId: null,
+      rawInput: text,
+      items: [EGG_ITEM, MILK_ITEM],
+      totals: { kcal: null, proteinG: null, carbsG: null, fatG: null, fiberG: null },
+      confidenceBand: 'unresolved',
+      unresolved: ['sữa ít đường'],
+    }),
+    ambiguous: [],
+    parser: 'rule-based-v1',
+  });
+
+  async function parseIt(): Promise<void> {
+    await userEvent.type(screen.getByLabelText('Describe your meal'), text);
+    await userEvent.click(screen.getByRole('button', { name: /Let AURA read it/ }));
+    await screen.findAllByText('Trứng luộc');
+  }
+
+  it("shows the user's word beside an assumed match, and asks for a check", async () => {
+    open();
+    fetchMock.mockImplementation(async () => json(200, draft()));
+    await parseIt();
+
+    // "trứng" was matched to the curated default; the preparation is an assumption.
+    expect(screen.getByText(/AURA read “trứng” and matched it to the closest food/)).toBeInTheDocument();
+    expect(screen.getByText(/Check this is what you had/)).toBeInTheDocument();
+    // The milk resolved to nothing — named as typed, with no figure and no stand-in food.
+    expect(screen.getByText('No nutrition found for')).toBeInTheDocument();
+    expect(screen.getAllByText(/sữa ít đường/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/cheese/i)).not.toBeInTheDocument();
+  });
+
+  it('says nothing extra when what was read is what was matched', async () => {
+    open();
+    fetchMock.mockImplementation(async () =>
+      json(200, {
+        meal: savedMeal({
+          id: 'draft-rice',
+          status: 'draft',
+          eventId: null,
+          items: [{ ...EGG_ITEM, detectedName: 'cơm trắng', displayNameVi: 'Cơm trắng', confidenceBand: 'confident' }],
+        }),
+        ambiguous: [],
+        parser: 'rule-based-v1',
+      }),
+    );
+    await userEvent.type(screen.getByLabelText('Describe your meal'), 'cơm trắng');
+    await userEvent.click(screen.getByRole('button', { name: /Let AURA read it/ }));
+    await screen.findAllByText('Cơm trắng');
+
+    expect(screen.queryByText(/AURA read “/)).not.toBeInTheDocument();
+  });
+
+  it('asks before closing on a reviewed meal that was never added', async () => {
+    open();
+    fetchMock.mockImplementation(async () => json(200, draft()));
+    await parseIt();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close composer' }));
+    // The draft is stored, but no list shows a draft: closing now would lose the meal.
+    const prompt = screen.getByRole('alertdialog', { name: /isn't in your timeline yet/ });
+    expect(prompt).toHaveAccessibleDescription(/won't appear in Today or History/);
+    expect(onClose).not.toHaveBeenCalled();
+
+    await userEvent.click(within(prompt).getByRole('button', { name: 'Keep reviewing' }));
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Trứng luộc').length).toBeGreaterThan(0);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close composer' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Close without logging' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    // Nothing was confirmed on the way out.
+    expect(callsTo('/confirm')).toHaveLength(0);
+  });
+
+  it('closes straight away when there is nothing to lose', async () => {
+    open();
+    await userEvent.click(screen.getByRole('button', { name: 'Close composer' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  });
+
+  it('confirms the draft, and only then reports it saved', async () => {
+    open();
+    fetchMock.mockImplementation(async (url: string) =>
+      String(url).includes('/meals/parse')
+        ? json(200, draft())
+        : json(200, savedMeal({ id: 'draft-egg', status: 'confirmed', eventId: 'event-egg', items: [EGG_ITEM, MILK_ITEM] })),
+    );
+    await parseIt();
+
+    await userEvent.click(screen.getByRole('button', { name: /Looks right/ }));
+    await waitFor(() => expect(callsTo('/meals/draft-egg/confirm')).toHaveLength(1));
+    expect(callsTo('/meals/draft-egg/confirm')[0]![1].method).toBe('POST');
+    expect(onSaved).toHaveBeenCalledWith('draft-egg', 'eat');
+    // Saved: closing no longer asks.
+    await userEvent.click(screen.getByRole('button', { name: 'Close composer' }));
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  });
+
+  it('surfaces a failed confirm instead of reporting the meal saved', async () => {
+    open();
+    fetchMock.mockImplementation(async (url: string) =>
+      String(url).includes('/meals/parse')
+        ? json(200, draft())
+        : json(500, errorBody('INTERNAL_ERROR', 'Something went wrong on our side.')),
+    );
+    await parseIt();
+
+    await userEvent.click(screen.getByRole('button', { name: /Looks right/ }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/went wrong/i);
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Logged/)).not.toBeInTheDocument();
+    // And the meal is still unsaved, so closing still asks.
+    await userEvent.click(screen.getByRole('button', { name: 'Close composer' }));
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+  });
+});

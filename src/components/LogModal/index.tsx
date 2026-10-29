@@ -288,6 +288,19 @@ const LogModalContent: React.FC<LogModalProps> = ({ onClose, onSaved, initialPro
   const categoryLocked = activityBusy || (busy && state.phase !== 'searching');
   const showReview = state.review !== null && state.phase !== 'searching';
 
+  /**
+   * A reviewed meal that has not been added yet. Reading a description already stored
+   * it — as a draft, which no list shows — so closing here used to drop a meal the person
+   * had typed in, silently: it never reached Today or History, and nothing said so. The
+   * first close asks; the second, from that prompt, closes as before.
+   */
+  const unsavedMeal = state.review !== null && state.phase !== 'saved';
+  const [confirmingClose, setConfirmingClose] = useState(false);
+  const requestClose = useCallback(() => {
+    if (unsavedMeal) setConfirmingClose(true);
+    else onClose();
+  }, [unsavedMeal, onClose]);
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-[#1e1b17]/40 backdrop-blur-md flex justify-center p-3 sm:p-6 lg:p-8 animate-in fade-in duration-200">
       <div className="relative w-full max-w-5xl my-auto">
@@ -316,13 +329,47 @@ const LogModalContent: React.FC<LogModalProps> = ({ onClose, onSaved, initialPro
             </div>
             <button
               aria-label="Close composer"
-              onClick={onClose}
+              onClick={requestClose}
               className="w-10 h-10 rounded-full bg-[#eee7e1] hover:bg-[#e8e1db] text-[#56423b] hover:text-[#1e1b17] flex items-center justify-center transition-all duration-200 flex-shrink-0"
               type="button"
             >
               <span className="material-symbols-outlined text-[20px]">close</span>
             </button>
           </div>
+
+          {confirmingClose && unsavedMeal && (
+            <div
+              role="alertdialog"
+              aria-labelledby="unsaved-meal-title"
+              aria-describedby="unsaved-meal-detail"
+              className="mt-4 p-4 rounded-2xl bg-[#fff4ec] border border-[#ffdbce] flex flex-col sm:flex-row sm:items-center gap-3"
+            >
+              <div className="flex-1 min-w-0">
+                <p id="unsaved-meal-title" className="text-sm font-bold text-[#1e1b17]">
+                  This meal isn't in your timeline yet
+                </p>
+                <p id="unsaved-meal-detail" className="text-xs text-[#56423b] mt-0.5">
+                  Close now and it won't appear in Today or History.
+                </p>
+              </div>
+              <div className="flex gap-2 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setConfirmingClose(false)}
+                  className="px-4 py-2 rounded-full bg-[#9f4118] text-white text-xs font-bold"
+                >
+                  Keep reviewing
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 rounded-full bg-[#eee7e1] text-[#56423b] text-xs font-bold"
+                >
+                  Close without logging
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Activity Category Selector — it decides the whole form below. Wraps rather
               than scrolling sideways, so no category is ever off-screen. Held still while
@@ -358,7 +405,7 @@ const LogModalContent: React.FC<LogModalProps> = ({ onClose, onSaved, initialPro
               text={state.text}
               onTextChange={(text) => dispatch({ type: 'setText', text })}
               onSaved={(id) => onSaved(id, category)}
-              onClose={onClose}
+              onClose={requestClose}
               onBusyChange={setActivityBusy}
             />
           )}

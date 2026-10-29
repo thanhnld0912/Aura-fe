@@ -103,6 +103,12 @@ export interface ReviewItem {
   confidenceBand: ConfidenceBand;
   /** Present only for a calculation — the server's account of how it got there. */
   trace?: string;
+  /**
+   * Describe and photo only: the phrase as it was read (`detectedName`), kept beside the
+   * database's name so a wrong match — "sữa ít đường" shown as a cheese — can be seen for
+   * what it is. Quick Add has none: there the person picked the food themselves.
+   */
+  detectedName?: string;
 }
 
 export interface ReviewModel {
@@ -161,6 +167,7 @@ export function reviewFromMeal(meal: Meal, ambiguous: string[] = []): ReviewMode
       source: item.source,
       confidence: item.confidence,
       confidenceBand: item.confidenceBand,
+      detectedName: item.detectedName,
     })),
     totals: meal.totals,
     unresolved: meal.unresolved,
