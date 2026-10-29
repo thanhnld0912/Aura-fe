@@ -33,6 +33,28 @@ interface MealReviewProps {
 const show = (value: number | null | undefined, suffix = ''): string =>
   value === null || value === undefined ? '—' : `${value}${suffix}`;
 
+const fold = (value: string): string => value.normalize('NFC').trim().toLowerCase();
+
+/**
+ * What was read, when it is not what was matched. A database name is the closest food
+ * the server found, not something the person said: "trứng" may be reviewed as *Trứng
+ * luộc*, a preparation nobody stated. Below the confident band the match is an
+ * assumption, and this says so and asks for a check before it is added.
+ */
+const ReadAs: React.FC<{ item: ReviewItem }> = ({ item }) => {
+  const read = item.detectedName?.trim();
+  // Unresolved items already show the phrase as their name, under "No nutrition found".
+  if (!read || item.source === 'unresolved' || fold(read) === fold(item.name)) return null;
+
+  return (
+    <p className="text-xs text-[#56423b]">
+      AURA read “{read}”
+      {item.confidenceBand !== 'confident' &&
+        ' and matched it to the closest food it knows. Check this is what you had, or remove it.'}
+    </p>
+  );
+};
+
 const MacroRow: React.FC<{ label: string; value: number | null | undefined }> = ({
   label,
   value,
@@ -112,6 +134,7 @@ export const MealReview: React.FC<MealReviewProps> = ({
                 </h3>
                 <ConfidenceBadge band={item.confidenceBand} confidence={item.confidence} />
               </div>
+              <ReadAs item={item} />
 
               <div className="text-xs text-[#56423b]">
                 {item.quantity !== null && item.unit
